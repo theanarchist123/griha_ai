@@ -1,0 +1,46 @@
+MongoDB connection initialized
+candidates=8
+candidate: 2 BHK Flat for rent in Dombivli East, Kalyan - Housing.com
+url: https://housing.com/rent/19816445-1060-sqft-2-bhk-apartment-on-rent-in-dombivli-east-thane
+price_parsed: None
+---
+candidate: 2 BHK Flats for Rent in Dombivli, Kalyan - MagicBricks
+url: https://www.magicbricks.com/2-bhk-flats-for-rent-in-dombivli-kalyan-pppfr
+price_parsed: None
+---
+candidate: 2 BHK Flat In Mohan Srishti Dombivli for Rent In Kalyan East
+url: https://www.nobroker.in/property/2-bhk-apartment-for-rent-in-kalyan-east-mumbai-for-rs-25000/8a9f8cc39264eef20192652d28600926/detail
+price_parsed: None
+---
+candidate: 2 BHK Flats for Rent in Dombivli, Thane - Housing.com
+url: https://housing.com/rent/2bhk-flats-for-rent-in-dombivli-thane-C4P5lbe880m2jpjfkws
+price_parsed: None
+---
+candidate: 2 BHK Flats for Rent in Dombivli, Thane - 572+ 2 BHK Flats / Apartments ...
+url: https://www.99acres.com/2-bhk-flats-for-rent-in-dombivli-mumbai-beyond-thane-ffid
+price_parsed: None
+---
+candidate: 2 BHK Flats for Rent in Dombivli, Thane - MagicBricks
+url: https://www.magicbricks.com/2-bhk-flats-for-rent-in-dombivli-beyond-thane-pppfr
+price_parsed: 13000.0
+---
+candidate: Flats for Rent in Phase 2,Dombivli East, Kalyan, Thane
+url: https://www.99acres.com/flats-for-rent-in-phase-2-dombivli-east-thane-outskirts-ffid
+price_parsed: None
+---
+candidate: 2 BHK Flats for Rent in Dombivli Kalyan under ₹15000 - MagicBricks
+url: https://www.magicbricks.com/2-bhk-flats-for-rent-in-dombivli-kalyan-price-10000-to-15000-pppfr
+price_parsed: 15000.0
+---
+live_saved_direct=8
+{"progress": 5, "status": "Initializing live search for 2 BHK in Kalyan-Dombivli, Kalyan-Dombivli...", "found_count": 0}
+{"progress": 18, "status": "Discovering listing pages from supported property sites...", "found_count": 0}
+{"progress": 40, "status": "Extracting live listing details from indexed results...", "found_count": 0}
+{"progress": 88, "status": "Persisted 2 live properties.", "found_count": 2}
+{"progress": 100, "status": "Live scraping complete. Fresh listings are ready on your dashboard.", "found_count": 2}
+saved_for_locality=14
+99acres https://example.com/property/scraped-kalyan-dombivli-2-bhk-0 42044.0 2 BHK
+housing https://example.com/property/scraped-kalyan-dombivli-2-bhk-1 106569.0 2 BHK
+99acres https://example.com/property/scraped-kalyan-dombivli-2-bhk-2 108748.0 2 BHK
+99acres https://example.com/property/scraped-kalyan-dombivli-2-bhk-3 49888.0 2 BHK
+magicbricks https://example.com/property/scraped-kalyan-dombivli-2-bhk-4 97730.0 2 BHK

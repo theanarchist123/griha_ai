@@ -1,0 +1,422 @@
+GRIHA AI — COMPLETE IMPLEMENTATION PLAN (REVISED)
+Build an AI-powered property finding platform called Griha AI. The AI does all the hard work — searching listings, checking legals, negotiating with brokers, and reviewing contracts. The user just makes decisions.
+
+NOTE ON TOOLS BEFORE STARTING
+MongoDB Compass is a desktop GUI application for viewing MongoDB data. It is not a database host. The actual database lives on MongoDB Atlas free tier (M0, 512MB, permanently free). Connect Compass to your Atlas cluster using the connection string from Atlas — this gives you the familiar Compass interface locally while the live app uses the same Atlas database. Vercel hosts the Next.js frontend only. Render free tier hosts the FastAPI backend — it supports persistent processes, Playwright, and APScheduler, and deploys from GitHub exactly like Vercel.
+
+==============================
+FRONTEND PLAN
+==============================
+
+TECH STACK FOR FRONTEND
+
+Use Next.js 14 with App Router as the framework. Use Tailwind CSS for all styling. Use shadcn/ui for components. Use Framer Motion for all animations. Use Recharts for the price trend chart on the neighbourhood page. Use Lucide React for icons. Use Clerk with the Next.js SDK for authentication. Import Playfair Display and DM Sans from Google Fonts. Use the Unsplash API for all property and city images. Deploy on Vercel. Set NEXT_PUBLIC_API_URL in Vercel environment variables pointing to the Render backend URL.
+
+Define these CSS variables globally and use them everywhere. cream is FAF8F3. charcoal is 1C1C1C. forest is 2D5016. forest-light is 4A7A28. warm-gold is C9922A. sand is E8DCC8. surface is FFFFFF. muted is 6B6B6B. border is E5E0D8. danger is C0392B. success is 27AE60. All pages use cream as the background color.
+
+Create a utility file at lib/unsplash.ts that exports functions for fetching property images and city images from the Unsplash API using the access key from environment variable NEXT_PUBLIC_UNSPLASH_ACCESS_KEY.
+
+Create a mock data file at lib/mockData.ts with 12 realistic properties across Mumbai localities — Andheri West, Bandra, Versova, Powai, Juhu, and Thane. Each property should have id, address, locality, city, price, size in sqft, BHK, floor, furnishing status, amenities array, match score, legal status, photo red flags array, ai insight string, days listed, and image URLs from Unsplash. Also include 3 mock negotiations, 5 mock legal reports, 8 mock documents, and 20 mock activity feed items.
+
+------------------------------
+PAGE 1 — LANDING PAGE at route /
+------------------------------
+
+This is the brand page. It must look like a funded product launch, not a student project.
+
+Build a hero section that takes the full viewport height. Fetch a Mumbai skyline image from Unsplash and use it as the background with a dark overlay at 55 percent opacity. Place the logo top left using Playfair Display italic for griha and warm-gold color for AI. Add a navigation bar with ghost white buttons for How it works, Features, and Pricing. Center the main headline in Playfair Display at 72px in white saying Find Your Home. Without the Headache. Below that add a sub-headline in DM Sans at 20px in white at 80 percent opacity explaining that Griha AI handles everything. Add a large CTA button in warm-gold background with charcoal text saying Find My Home linking to the onboarding route. Below the button add three social proof badges in a row showing 12400 properties verified, 8200 contracts reviewed, and 94 percent of users found a home in 3 weeks. Animate the hero content with Framer Motion staggered reveal on page load.
+
+Build a How It Works section on cream background. Add a section title in Playfair Display at 48px. Show 4 steps in a horizontal timeline with a dotted connecting line. Step 1 is Tell us what you want with a MessageCircle icon. Step 2 is We search everything with a Search icon. Step 3 is AI verifies and negotiates with a ShieldCheck icon. Step 4 is You just sign with a FileCheck icon. Each step has a warm-gold circular number badge, the icon in forest color, a bold title, and a short description. Animate each step sliding up with stagger on scroll into view using Framer Motion.
+
+Build a Features section on charcoal background using a bento grid layout with varied card sizes. The large card spanning two columns shows a mock negotiation chat thread between Griha AI and a broker with a caption about real negotiation. A medium card shows a legal risk assessment with colored badges. A small card shows a daily digest notification mockup. Another small card shows a crossed-out listing with a duplicate detected badge. A medium card shows a neighbourhood intelligence mockup with distance pins. All cards have hover animations with slight scale and border glow.
+
+Build a Testimonials section on sand background with 3 cards showing quotes from Indian users with names, cities, and star ratings.
+
+Build a Pricing section on cream background with two plan cards side by side. Free plan at zero rupees with limited features and a Start Free CTA. Pro plan at 999 rupees per month with all features, a Most Popular badge in warm-gold, and a Start 7-day Free Trial CTA button in forest green.
+
+Build a Footer on charcoal background with the logo, tagline, three columns of links, and copyright.
+
+------------------------------
+PAGE 2 — ONBOARDING at route /onboarding
+------------------------------
+
+This is a conversational interface, not a form. It must feel like chatting with a smart assistant.
+
+Build a full screen split layout. Left half shows a large Unsplash property image that changes with each step, a step counter overlay showing Step X of 5, and a subtle quote about home finding at the bottom. Right half is the chat interface on cream background.
+
+Griha AI sends messages one at a time with a typing animation showing three animated dots before each message appears. User responses appear right-aligned in forest green bubbles. Each Griha AI message has a small forest green G avatar. Show a progress bar at the very top of the right panel.
+
+Message 1 asks whether the user is looking to rent or buy. Show two large pill buttons for the response.
+
+Message 2 asks which city or area they are targeting. Show a text input with a dropdown of city suggestions including Bangalore, Mumbai, Pune, Delhi, Hyderabad, and Chennai.
+
+Message 3 asks for their budget. Show a styled slider component. For rent show range from 10000 to 200000 rupees per month. For buy show range from 20 lakhs to 5 crores.
+
+Message 4 asks what is most important to them. Show multi-select pill chips with Framer Motion selection animation. Options are Metro nearby, No broker, Pet friendly, Furnished, Parking, Quiet area, Gated society, Near school, Work from home friendly, and Good natural light.
+
+Message 5 asks for deal breakers. Show a text input for free text entry. After submission show a Building your search profile animation with a progress bar.
+
+After step 5 show a full screen animation on forest green background. The Griha AI logo scales up from zero. Then three lines appear with stagger. Line 1 in white Playfair at 36px says Your search is live. Line 2 in white DM Sans at 18px says Griha AI is already scanning 1200 plus listings for you. Line 3 in white at 50 percent opacity says You will have your first matches within 24 hours. Show loading dots at the bottom. Auto redirect to dashboard after 2.5 seconds. Before redirecting save all onboarding responses to the API at POST /api/search/profile with the user's Clerk token.
+
+------------------------------
+PAGE 3 — DASHBOARD at route /dashboard
+------------------------------
+
+This is the command center. It must feel calm and organized, not overwhelming.
+
+Build a fixed sidebar at 260px width on white background with a subtle right border. Show the logo at the top, a personalized greeting with the user's name from Clerk, and their active search summary. Navigation links with Lucide icons go to My Matches with a count badge, Pipeline, Legal Checks, Negotiations, Documents, Neighbourhood, and Preferences. At the bottom show the user avatar and their plan badge.
+
+Build a sticky status bar at the top of the main content area showing how many listings Griha AI searched today, how many new matches were found, and whether any negotiation is active. Use a pulsing green dot for the live indicator.
+
+Build a Today's Top Matches section with a horizontally scrollable row of property cards. Each card shows an Unsplash apartment image in the top 60 percent of the card, an AI match score badge in forest green in the top right corner, a red flag warning badge in warm-gold in the top left if any concerns exist, the property title with BHK and locality and price below, three attribute chips showing size, metro distance, and floor, a one-line AI insight in italic forest green, and two buttons for View Details and Quick Reject. Animate cards sliding in from the right on mount using Framer Motion.
+
+Build a Pipeline Kanban section with four columns — Shortlisted, Under Review, Negotiating, and Offer Made. Each column has a count badge and compact property cards showing image thumbnail, address, price, and the last AI action taken.
+
+Build an AI Activity Feed as a 300px fixed right panel. Title it What Griha AI did while you were away. Show a chronological list of AI actions with icons, descriptions, and timestamps.
+
+------------------------------
+PAGE 4 — PROPERTY DETAIL at route /property/[id]
+------------------------------
+
+Build an image gallery at the top using Unsplash images for apartment india. Show one large image on the left and three smaller ones stacked on the right. Clicking any image opens a fullscreen lightbox.
+
+Below the gallery use a two column layout. Left column is main content and right column is a sticky sidebar.
+
+In the left column build five content blocks. First block shows basic details including address, price, size, floor, furnishing, and attribute chips. Second block is the AI Match Analysis with a circular progress score animated from zero, breakdown per preference as green checkmarks and orange warnings, and an AI insight paragraph. Third block is Photo Intelligence showing red flag cards with severity badges or a clean green confirmation. Fourth block is Neighbourhood Snapshot with four metric cards and a commute calculator input. Fifth block shows Resident Sentiment as a summarized paragraph with a score.
+
+In the right column show a Legal Status card with RERA status, encumbrance status, tax dues status, and an overall risk badge. Below it show an Action card with three full-width buttons — Start Negotiation in forest green, Save to Pipeline outlined, and Schedule Visit outlined.
+
+------------------------------
+PAGE 5 — NEGOTIATION at route /negotiate/[id]
+------------------------------
+
+Build a split screen layout. Left panel is the strategy panel. Right panel is the live conversation thread.
+
+In the left panel show a property summary card with image, address, and listed price. Show Market Intelligence with fair value range, days listed, similar properties count, and recommended opening offer. Add negotiation controls with a slider for maximum price, a tone selector with Aggressive, Balanced, and Polite options, and priority chips. Add a large Start Negotiation button and a pulsing Negotiation Active status badge.
+
+In the right panel build a styled conversation thread. Griha AI messages appear on the left with green avatar and cream bubbles. Broker responses appear on the right with gray bubbles. Show timestamps, a typing indicator when AI is composing, an AI analysis bar after each broker response, and Approve and Override buttons at the bottom. Show a current offer versus maximum price bar.
+
+------------------------------
+PAGE 6 — LEGAL REPORT at route /legal/[id]
+------------------------------
+
+Build a full-width verdict banner at the top. Forest green background for Clean, amber background for Caution, red background for High Risk. Each has an icon and one sentence plain English verdict.
+
+Below the banner build four check cards — RERA Registration, Encumbrance Certificate, Property Tax, and Builder Track Record. Each card has a colored status badge and a plain English paragraph explaining what was found. Add a disclaimer at the bottom and a Download Report button.
+
+------------------------------
+PAGE 7 — DOCUMENTS at route /documents
+------------------------------
+
+Build a smart search bar at the top for natural language questions about documents. Show the AI answer inline below the bar when a question is submitted.
+
+Show files organized into category sections — Agreements, Legal Reports, Receipts, Property Photos, and Negotiation Transcripts. Each file is a card with document type icon, filename, date, one-line AI summary, and View Download Share buttons. Add a large drag and drop upload area at the bottom.
+
+------------------------------
+PAGE 8 — PREFERENCES at route /preferences
+------------------------------
+
+Build a card-based layout where each preference is an editable card. Clicking Edit opens an inline conversational edit prompt. Cards cover what they are looking for, budget with a visual bar, must-haves as chips, deal breakers as chips, commute destination, and notification settings with toggles. Add a Save and Restart Search button in forest green.
+
+------------------------------
+PAGE 9 — COMPARISON at route /compare
+------------------------------
+
+Build a sticky header row with one column per property showing image, address, price, and match score. Maximum 4 properties. Add a remove button per column and an Add Property button opening a shortlist modal.
+
+Build comparison rows grouped into Basics, AI Intelligence, Legal, Neighbourhood, and Financials sections. Highlight best value in forest green and worst value in warm-gold. Show a dash for unavailable data. Add a sticky bottom action row with Start Negotiation and Shortlist buttons per column. On mobile enable horizontal scroll for columns with category labels sticky on the left.
+
+------------------------------
+PAGE 10 — NEIGHBOURHOOD DETAIL at route /neighbourhood/[id]
+------------------------------
+
+Build a full-width hero with an Unsplash city image and the locality name overlaid.
+
+Build five content blocks in the main column. Commute Intelligence with primary destination card, peak versus off-peak toggle, transport mode tabs, and add destination input. Amenities Grid with 4 cards per row for all categories with distance and rating. Environmental Risk with three metric cards for Flood Risk, AQI, and Noise Level. Resident Voices with overall star rating, positive chips in forest green, concern chips in warm-gold, and 3 review cards. Price trend as a Recharts line chart for 12 months with current property price marked.
+
+Build a sticky right sidebar with Quick Stats card and a Livability Score card showing a circular overall score with five sub-scores.
+
+------------------------------
+PAGE 11 — ACTIVITY FEED at route /activity
+------------------------------
+
+Build a single centered column with maximum width 720px. Add filter tabs for All, Matches, Negotiations, Legal, Documents, and Alerts.
+
+Each item is a card with a colored icon circle, main text in bold, property name and timestamp, and an action button where relevant. Colors are forest green for matches, blue for legal completions, warm-gold for negotiation updates, orange for photo alerts, red for legal risk, and dark gray for system actions. Add a Load More button at the bottom and a friendly empty state with pulsing logo.
+
+------------------------------
+SHARED COMPONENTS AND RULES
+------------------------------
+
+Build a Navbar for dashboard pages with logo, search bar, notification bell with badge, and user avatar dropdown.
+
+Build a reusable PropertyCard with props for image, matchScore, address, price, size, metro distance, red flag count, and AI insight.
+
+Build an AIStatusBadge with an animated pulsing dot and descriptive text. Use sparingly.
+
+Build an EmptyState component that always shows a warm encouraging message. Never show a blank screen.
+
+Build loading states that always describe what is happening in plain English. Never use a plain spinner alone. Use Framer Motion skeleton loaders.
+
+Build Toast notification components for AI actions.
+
+All animations use Framer Motion with ease-out and maximum 400ms duration. Page transitions are fade and slide up at 0.3 seconds. Cards use staggered reveal on mount. Match score circles animate from zero to value on mount.
+
+==============================
+BACKEND PLAN
+==============================
+
+TECH STACK FOR BACKEND
+
+Use FastAPI with Python 3.11 as the backend framework. Use Motor as the async MongoDB driver. Use Beanie as the ODM on top of Motor. Use MongoDB Atlas M0 free tier as the database. Connect MongoDB Compass to the same Atlas cluster using the Atlas connection string for local GUI access during development. Use MongoDB Atlas Vector Search for all semantic search and RAG operations — this is included free on the M0 cluster. Use Gemini embedding-001 for generating all vector embeddings. Use Gemini 1.5 Pro for complex reasoning tasks like negotiation messages, contract analysis, and legal summaries. Use Gemini 1.5 Flash for fast tasks like match scoring, fake detection, and clause splitting. Use Gemini Vision free tier for property photo defect detection only. Use OCR.space free API for all document text extraction including PDFs and scanned agreements. Use LangChain with langchain-google-genai and langchain-mongodb packages for all RAG pipelines. Use LangGraph for the negotiation agent orchestration. Use Playwright for all web scraping. Use APScheduler with AsyncIOScheduler for all scheduled jobs — runs inside the same FastAPI process on Render. Use FastAPI BackgroundTasks for all async job triggering. Use Twilio SDK directly in FastAPI for WhatsApp messaging. Use Resend SDK directly in FastAPI for all email sending. Use Cloudinary SDK for document and file storage. Use Clerk JWT verification on all protected API routes. Use PyMuPDF for PDF text extraction before OCR.space. Deploy on Render free tier. The start command on Render is uvicorn main:app --host 0.0.0.0 --port $PORT.
+
+IMPORTANT NOTE ON RENDER FREE TIER
+Render free tier spins down after 15 minutes of inactivity. To prevent this add a self-ping mechanism. In main.py on startup schedule an APScheduler job that runs every 10 minutes and makes an HTTP GET request to the app's own /health endpoint. This keeps the service alive permanently at no cost.
+
+------------------------------
+HOW TO CONNECT MONGODB COMPASS TO ATLAS
+------------------------------
+
+After creating a free MongoDB Atlas account and M0 cluster, get the connection string from Atlas dashboard under Connect using Compass. It looks like mongodb+srv://username:password@cluster0.xxxxx.mongodb.net. Open MongoDB Compass on your machine and paste this connection string. You will see all your Atlas collections locally in Compass exactly like a local database. Use this same connection string as the MONGODB_URL environment variable in both your local .env file and in Render environment variables.
+
+------------------------------
+DATABASE MODELS
+------------------------------
+
+Create a users collection. Each document stores clerk_id, email, name, plan as either free or pro, created_at, and a reference to the user's search profile.
+
+Create a search_profiles collection. Each document stores user_id reference, intent as rent or buy, city, localities as an array, budget_min, budget_max, size as a BHK string, must_haves as an array, deal_breakers as an array, commute_destination, commute_time, active boolean, and updated_at.
+
+Create a properties collection. Each document stores external_id, source platform, source_url, title, address, locality, city, price, size_sqft, bhk, floor, total_floors, furnished status, images array, amenities array, description, listed_days_ago, is_fake boolean, fake_confidence float, photo_red_flags array, legal_status, rera_registered boolean, rera_number, embedding as a 768-dimensional float array, created_at, and updated_at.
+
+Create a matches collection. Each document stores user_id, property_id, match_score integer, match_breakdown object with booleans per preference, ai_insight string, recommended_action string, status as new or shortlisted or visited or rejected or negotiating or closed, digest_sent boolean, and created_at.
+
+Create a negotiations collection. Each document stores user_id, property_id, status as active or paused or waiting_for_broker or closed_won or closed_lost, user_max_price, tone, current_offer, broker_contact phone number, messages array where each message has role as agent or broker, content, timestamp, and approved_by_user boolean, market_fair_value_min, market_fair_value_max, langgraph_state as a JSON object for resuming the graph, turn_count, and created_at.
+
+Create a legal_reports collection. Each document stores property_id, rera object, encumbrance object, property_tax object, builder_track_record object, overall_risk as clean or caution or high_risk, plain_english_summary string, and generated_at.
+
+Create a documents collection. Each document stores user_id, property_id as optional, document_type as rent_agreement or sale_deed or legal_report or receipt or photo, cloudinary_url, filename, ai_summary string, extracted_text string from OCR, extracted_data object, clause_analysis array, redline_url as optional Cloudinary URL, and uploaded_at.
+
+Create a neighbourhood_reports collection. Each document stores locality, city, commute_data object, amenities array, flood_risk, aqi_score, noise_level, price_trend array of 12 monthly values, resident_sentiment object, livability_scores object, cached_at, and expires_at set to 7 days after caching.
+
+Create a legal_corpus collection for RAG only. Each document stores chunk_text, source_act name, section reference, state where applicable, embedding array, and ingested_at. Populate this once using the setup script before launch.
+
+Create a neighbourhood_reviews collection for RAG only. Each document stores review_text, locality, city, source platform, embedding array, and scraped_at.
+
+Create the MongoDB Atlas Vector Search index manually in the Atlas UI on the properties collection. Configure it as a vector index on the embedding field with 768 dimensions and cosine similarity. Add pre-filters on city, price, and bhk fields. Create a second vector index on the legal_corpus collection on the embedding field. Create a third vector index on the neighbourhood_reviews collection on the embedding field. Create a fourth vector index on the documents collection on the embedding field filtered by user_id.
+
+------------------------------
+PROJECT FOLDER STRUCTURE
+------------------------------
+
+Create main.py as the FastAPI entry point. This file creates the app, registers all routers, starts APScheduler with all cron jobs on startup, and includes the self-ping job for Render keep-alive.
+
+Create config.py for all environment variables using pydantic-settings.
+
+Create a database folder with connection.py for the Motor Atlas connection and a models subfolder with one file per collection.
+
+Create an agents folder with scraping_agent.py, matching_agent.py, photo_agent.py, legal_agent.py, negotiation_agent.py, contract_agent.py, and neighbourhood_agent.py.
+
+Create a scrapers folder with base_scraper.py, magicbricks_scraper.py, ninetyacres_scraper.py, nobroker_scraper.py, rera_scraper.py, and land_records_scraper.py.
+
+Create a services folder with gemini_service.py, ocr_service.py, rag_service.py, vector_service.py, notification_service.py, cloudinary_service.py, and maps_service.py.
+
+Create an api folder with a routes subfolder containing auth.py, search.py, properties.py, negotiation.py, legal.py, documents.py, neighbourhood.py, dashboard.py, and internal.py. Create a middleware subfolder with auth_middleware.py.
+
+Create a scripts folder with ingest_legal_corpus.py and ingest_neighbourhood_reviews.py for one-time data seeding.
+
+------------------------------
+AGENT 1 — SCRAPING AGENT
+------------------------------
+
+Tech used — Playwright for browser automation, Gemini Flash for fake detection, Gemini embedding-001 for embeddings, Motor for Atlas operations, APScheduler for scheduling.
+
+The agent runs every 6 hours via APScheduler. It also runs immediately when a new user completes onboarding. It is manually triggerable via POST /api/internal/scrape with X-Internal-Key header.
+
+The agent loads all active search profiles from Atlas. For each unique city, BHK, and budget combination it launches a scraping run. The same city and BHK combination is only scraped once per cycle even if multiple users need it.
+
+Build a base scraper class with shared Playwright logic for launching headless Chromium, setting rotating user agent strings from a list of 5 real Chrome UA strings, navigating to a given URL and waiting for networkidle state, extracting data with CSS selectors, handling timeouts by skipping rather than crashing, and closing the browser cleanly. Add a random delay between 2 and 5 seconds between requests and simulate page scroll before extracting.
+
+Build separate scraper classes for MagicBricks, 99acres, and NoBroker. Each constructs its search URL from city, BHK, and budget parameters and extracts title, price text, address, size in sqft, floor, furnishing status, amenities, images array, listing URL, and days listed from the listing cards.
+
+After collecting raw listings run them through a processing pipeline. Normalize price strings to integers. Normalize size strings to integers. Run URL deduplication by checking source_url against Atlas. Skip any listing whose URL already exists. Run semantic deduplication for new listings by generating a temporary embedding and querying Atlas Vector Search with city and price range filters — skip if cosine similarity with top result exceeds 0.92. Run fake detection by sending listing data to Gemini Flash and asking for a JSON response with is_fake boolean, confidence score, and reasons array — mark as fake only if confidence exceeds 0.75. Generate the full embedding using Gemini embedding-001 on a text combining title, address, locality, BHK, furnishing, and amenities. Insert the property document into Atlas. After each batch completes trigger the matching agent and photo analysis agent as FastAPI BackgroundTasks with the array of new property IDs.
+
+If a CAPTCHA is detected during scraping skip that run gracefully and log it. Do not crash.
+
+------------------------------
+AGENT 2 — MATCHING AGENT
+------------------------------
+
+Tech used — Gemini Flash for AI scoring, Motor for Atlas queries, Resend SDK for emails, APScheduler for scheduling.
+
+The agent runs as a FastAPI BackgroundTask after scraping, when a user updates preferences, and as a full re-match daily at midnight via APScheduler.
+
+Phase one is a hard MongoDB filter — query Atlas for properties matching city, price at or below budget_max, correct BHK, is_fake false, and not already rejected by this user. This reduces thousands of properties to around 50 candidates without any LLM calls.
+
+Phase two sends each candidate to Gemini Flash for scoring. The prompt provides the full user preference profile and property details and asks for match score from 0 to 100, a breakdown object with booleans per preference, a single plain English AI insight sentence, and a recommended action. Store each result in the matches collection.
+
+After each score check if score is 90 or above and immediately trigger an instant alert email via Resend.
+
+Run the daily digest via APScheduler at 8 AM. Query matches from the last 24 hours per user. Take the top 5 by score. Send a branded HTML email via Resend with each property shown as a card. Mark included matches as digest_sent true in Atlas.
+
+------------------------------
+AGENT 3 — PHOTO ANALYSIS AGENT
+------------------------------
+
+Tech used — Gemini Vision free tier for defect detection, httpx for downloading image bytes, Motor for Atlas updates.
+
+The agent runs as a FastAPI BackgroundTask after scraping. It also has a manual trigger at POST /api/internal/analyze-photos with property_id.
+
+For each property load the images array from Atlas. Process a maximum of 6 images. For each image download the bytes using httpx and send directly to Gemini Vision. The prompt instructs detection of water damage signs, structural issues, poor maintenance, misleading photography, and incomplete construction. It explicitly instructs to only flag issues with clear visible evidence and to skip anything uncertain. Ask for a JSON response with has_issues boolean and issues array where each item has type, severity, confidence, and plain English description. Store only issues with confidence above 0.70. Update the property document in Atlas with the complete photo_red_flags array.
+
+------------------------------
+AGENT 4 — LEGAL AGENT
+------------------------------
+
+Tech used — Playwright for RERA and land records portals, Gemini Flash for plain English summary, Motor for Atlas, Resend for legal alerts.
+
+The agent runs as a FastAPI BackgroundTask when a user shortlists a property, via manual trigger at POST /api/legal/check, and as an APScheduler batch at 2 AM daily for any shortlisted properties missing a report.
+
+Build a RERA scraper using Playwright for MahaRERA portal for Maharashtra properties, KRERA for Karnataka, and equivalent portals for other states. Search by project name and locality. Extract registration number, status, complaint count, and delivery timeline. For resale properties mark RERA as not applicable.
+
+Build a land records scraper using Playwright for IGRS Maharashtra for Mumbai and Pune, and Kaveri portal for Bangalore. Search by property address. If the portal is unavailable mark encumbrance as manual check required, never as clear.
+
+Build a property tax checker using Playwright for MCGM for Mumbai, BBMP for Bangalore, and PMC for Pune.
+
+Compute overall risk in Python with no LLM call. Return high_risk if complaints exceed 15 or an active loan exists. Return caution if not registered or complaints exceed 5 or tax dues are pending. Return clean otherwise.
+
+Generate the plain English summary using Gemini Flash with a prompt providing all check results and asking for a 3-sentence summary starting with the overall verdict. Store the complete report in Atlas. If risk is caution or high_risk send a legal alert email via Resend.
+
+------------------------------
+AGENT 5 — NEGOTIATION AGENT
+------------------------------
+
+Tech used — LangGraph for agent orchestration, Gemini Pro for message generation, Gemini Flash for broker response analysis, Twilio SDK for WhatsApp, Motor for Atlas state persistence.
+
+The agent starts only on explicit user action via POST /api/negotiate/start with property_id, user_max_price, tone, and priorities. It never starts automatically.
+
+Build the LangGraph state as a TypedDict with property, user_prefs, market_data, messages, current_offer, broker_last_response, turn_count, status, and analysis fields.
+
+Node 1 — research_market — queries Atlas for comparable properties in the same locality and BHK listed in the last 90 days with price within 20 percent of target. Computes average, minimum, and maximum price using MongoDB aggregation. No LLM call.
+
+Node 2 — craft_opening_message — calls Gemini Pro with market data, listed versus fair value gap, days on market, photo red flags as leverage, and user tone. Calculates opening offer as 87 percent of listed price. Waits 2 minutes using asyncio sleep before sending to simulate human behavior.
+
+Node 3 — send_whatsapp_message — calls Twilio SDK directly to send the message to the broker's WhatsApp number. Appends negotiation_id as a query parameter to the Twilio inbound webhook URL. Stores the message in Atlas. Saves complete LangGraph state to Atlas. Sets status to waiting_for_broker and stops.
+
+The graph does not poll for responses. When the broker replies Twilio fires a webhook to POST /api/internal/negotiation-response. FastAPI receives this, reads From number and Body from the Twilio form-encoded payload, matches to the active negotiation in Atlas using the From number or the negotiation_id query parameter, loads the saved LangGraph state from Atlas, and resumes the graph.
+
+Node 4 — analyze_broker_response — sends broker message to Gemini Flash asking for price offered if any, broker sentiment as willing or firm or hostile, and recommended next action as counter, agree, walk_away, or escalate_to_user.
+
+The routing function checks turn_count first. If turn_count exceeds 6 route to escalate_to_user. Otherwise route based on recommended action.
+
+Node 5 — craft_counter_offer — calculates next offer with a step size that decreases as the offer approaches user maximum. Never exceeds user maximum. Calls Gemini Pro to write the counter message in the chosen tone.
+
+Node 6 — close_deal — sends confirmation to broker, updates negotiation status to closed_won in Atlas, sends congratulations email to user via Resend.
+
+Node 7 — escalate_to_user — sends a WhatsApp message to the user via Twilio explaining the situation and asking them to reply 1 to accept, 2 to make a final offer, or 3 to walk away. Saves state and pauses. Resumes when the user replies via the same Twilio inbound webhook.
+
+------------------------------
+AGENT 6 — CONTRACT AGENT
+------------------------------
+
+Tech used — OCR.space free API for text extraction, PyMuPDF for initial PDF processing, Gemini Flash for clause splitting, LangChain with Atlas Vector Search for RAG clause analysis, Gemini Pro for redline generation, Cloudinary for output storage.
+
+The agent runs as a FastAPI BackgroundTask when a document of type rent_agreement or sale_deed is uploaded.
+
+First extract text from the uploaded document. Use PyMuPDF to attempt direct text extraction. If extracted text exceeds 200 characters it is a text-based PDF — use that text. If less than 200 characters it is a scanned PDF — send the file bytes to the OCR.space API at api.ocr.space/parse/image with language set to eng, isTable set to false, and detectOrientation set to true. Extract parsed_text from the response and store it in the document's extracted_text field in Atlas.
+
+Next split the document into clauses. Send the full extracted text to Gemini Flash asking it to identify and separate each clause and return a JSON array where each item has clause_number, heading if any, and verbatim clause text.
+
+Analyze each clause using LangChain RAG. For each clause run a vector similarity search against the legal_corpus collection in Atlas to retrieve the top 3 most relevant sections of Indian law. Build a LangChain stuff_documents_chain that takes the retrieved law sections and clause text and calls Gemini Pro to determine risk level as standard, caution, or high, plain English meaning, specific problem if risky, recommended corrected wording, and relevant law section. Store complete analysis in the clause_analysis array in Atlas.
+
+Generate the redlined counter-draft. Filter clauses where risk is high. Reconstruct the document replacing high-risk clause text with the recommended corrected wording. Send the reconstructed text to Gemini Pro to format as a clean professional agreement. Upload to Cloudinary. Store the URL as redline_url in Atlas.
+
+For document Q&A at POST /api/documents/ask retrieve all text chunks belonging to the user from Atlas filtered by user_id. Build a LangChain ConversationalRetrievalChain using Atlas Vector Search as the retriever and Gemini Pro as the LLM. Return the answer and the source clause reference.
+
+Before launch run the ingest_legal_corpus.py script once. This loads the Indian Contract Act 1872, Model Tenancy Act 2021, Maharashtra Rent Control Act 1999, Transfer of Property Act 1882 relevant sections, and RERA Act 2016 relevant sections. Split each into 500-token chunks with 50-token overlap. Generate Gemini embeddings. Store all chunks in the legal_corpus collection in Atlas with source act name and section reference as metadata.
+
+------------------------------
+AGENT 7 — NEIGHBOURHOOD AGENT
+------------------------------
+
+Tech used — Google Maps Distance Matrix API for commute times, Google Places API for amenities, Playwright for price trend scraping, data.gov.in API for AQI data, LangChain with Atlas Vector Search for sentiment RAG, Gemini Flash for sentiment synthesis, APScheduler for weekly refresh.
+
+The agent runs when a user opens a property detail page and no neighbourhood report exists for that locality, and as an APScheduler job every Sunday at 3 AM to refresh cached reports. Reports are cached per locality not per property. Always check expires_at first — if the cached report is still fresh return it immediately without re-running.
+
+For commute data call Google Maps Distance Matrix API with the property coordinates as origin and the user's commute destination from their search profile as destination. Request results for all four travel modes. Use departure time set to next Monday at 9 AM for peak hour and 11 AM for off-peak.
+
+For amenities call Google Places API nearby search with a 1500 meter radius around the property. Run separate queries for each category. Take the top 3 results per category sorted by rating.
+
+For flood risk scrape the IMD website for historical waterlogging records for the locality's PIN code. Classify as Low, Medium, or High based on incident frequency over the last 5 years.
+
+For AQI call the data.gov.in CPCB air quality public API and filter by the nearest monitoring station to the property's city.
+
+For noise level compute programmatically from the property's distance to major highways using Google Maps Roads API, distance to railway lines, and distance to the nearest airport. Within 200 meters of a highway is High. Between 200 and 800 meters is Medium. Beyond 800 meters is Low.
+
+For price trends use Playwright to scrape the locality price trends section on MagicBricks for the specific locality and BHK type. Extract 12 months of average rental prices.
+
+For resident sentiment scrape Google Places reviews for the top 5 housing societies in the locality and locality review pages on Housing.com and MagicBricks. Store all raw review texts in the neighbourhood_reviews collection in Atlas with embeddings. Build a LangChain map_reduce chain that retrieves all stored reviews for the locality, extracts positives and negatives from each, and reduces to top 3 positives, top 3 concerns, and an overall sentiment score.
+
+Compute livability score in Python without any LLM. Score connectivity from metro distance. Score amenities from count of categories with results within 1 kilometer. Score environment by inverting AQI. Score affordability by comparing area average rent to city average. Score safety from proximity to police station plus civic complaint density. Compute overall as the mean of the five sub-scores.
+
+Store the complete report in Atlas with expires_at set to 7 days later.
+
+------------------------------
+APSCHEDULER JOBS
+------------------------------
+
+Register all jobs in main.py on startup using AsyncIOScheduler.
+
+The self-ping job runs every 10 minutes and makes an HTTP GET request to the app's own /health endpoint on Render. This prevents the free tier from spinning down.
+
+The scraping job runs every 6 hours at midnight, 6 AM, noon, and 6 PM.
+
+The full rematching job runs daily at midnight.
+
+The daily digest job runs daily at 8 AM.
+
+The legal checks batch job runs daily at 2 AM for shortlisted properties missing reports.
+
+The neighbourhood reports refresh job runs every Sunday at 3 AM.
+
+------------------------------
+INTERNAL ENDPOINTS
+------------------------------
+
+Create an internal.py router with prefix /api/internal. All routes are protected by X-Internal-Key header check, not Clerk auth.
+
+Endpoints are POST /scrape to manually trigger scraping, POST /match to manually trigger rematching, POST /analyze-photos with property_id to trigger photo analysis, POST /negotiation-response to receive Twilio inbound WhatsApp messages and resume the LangGraph negotiation graph, POST /log-scrape-run to record scraping results, and GET /active-profiles to return all active search profiles.
+
+------------------------------
+AUTHENTICATION
+------------------------------
+
+Create auth_middleware.py with a verify_clerk_token dependency that reads the Bearer token from the Authorization header, calls the Clerk API to verify it, and returns the decoded user payload. Use this as a FastAPI Depends on all user-facing routes.
+
+On user first login call POST /api/auth/sync-user to create the user document in Atlas if it does not already exist.
+
+------------------------------
+ENVIRONMENT VARIABLES
+------------------------------
+
+Local .env file needs MONGODB_URL as the Atlas connection string, GEMINI_API_KEY, CLERK_SECRET_KEY, OCR_SPACE_API_KEY, CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET, RESEND_API_KEY, TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WHATSAPP_FROM, GOOGLE_MAPS_API_KEY, INTERNAL_API_KEY, FRONTEND_URL, and APP_URL which is the Render deployment URL used for the self-ping job.
+
+Add all the same variables in Render environment variable settings. Add NEXT_PUBLIC_API_URL pointing to the Render URL, NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY, and NEXT_PUBLIC_UNSPLASH_ACCESS_KEY in Vercel environment variable settings.
+
+------------------------------
+REQUIREMENTS
+------------------------------
+
+fastapi, uvicorn with standard extras, motor, beanie, google-generativeai, langchain, langchain-google-genai, langchain-mongodb, langchain-community, langgraph, playwright, apscheduler, httpx, pymupdf, requests, cloudinary, resend, twilio, python-multipart, python-jose, pydantic, pydantic-settings, Pillow.
+
+After pip install run playwright install chromium to download the browser binary. On Render add this as a build command after pip install.
+
+------------------------------
+DEPLOYMENT
+------------------------------
+
+Frontend deployment on Vercel. Connect your GitHub repo. Set the root directory to the frontend folder. Add all NEXT_PUBLIC environment variables in Vercel project settings. Deploy.
+
+Backend deployment on Render. Connect your GitHub repo. Set the root directory to the backend folder. Set the build command to pip install -r requirements.txt and playwright install chromium. Set the start command to uvicorn main:app --host 0.0.0.0 --port $PORT. Add all backend environment variables in Render service settings. The self-ping APScheduler job runs every 10 minutes to keep the free tier alive. Add a GET /health endpoint in main.py that returns status ok — Render uses this to confirm the service is running.
+
+MongoDB Compass setup for local development. Open Compass. Click New Connection. Paste the Atlas connection string from the Atlas dashboard. Click Connect. You now have full GUI access to all your Atlas collections during development.
