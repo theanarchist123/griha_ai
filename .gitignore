@@ -1,0 +1,10 @@
+# Secrets and local env files
+backend/.env
+backend/.env.local
+frontend/.env
+frontend/.env.local
+
+# Python caches and virtual environments
+backend/__pycache__/
+backend/**/*.pyc
+backend/venv/

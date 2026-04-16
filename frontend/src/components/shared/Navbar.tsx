@@ -125,6 +125,7 @@ interface DashboardTopBarProps {
 }
 
 export function DashboardTopBar({ filters, onApplyFilters }: DashboardTopBarProps) {
+  const { user, isSignedIn } = useUser();
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const [draftFilters, setDraftFilters] = useState<DashboardSearchFilters>(filters);
   const [locationSuggestions, setLocationSuggestions] = useState<string[]>([]);
@@ -259,6 +260,12 @@ export function DashboardTopBar({ filters, onApplyFilters }: DashboardTopBarProp
     setIsSearchExpanded(false);
     setLocationSuggestions([]);
   };
+
+  const profileName =
+    user?.fullName ||
+    user?.firstName ||
+    user?.primaryEmailAddress?.emailAddress ||
+    "Home Seeker";
 
   return (
     <div className="sticky top-0 z-30 bg-cream/90 backdrop-blur-md border-b border-border-custom">
@@ -464,6 +471,21 @@ export function DashboardTopBar({ filters, onApplyFilters }: DashboardTopBarProp
 
         {/* Right side interactions */}
         <div className="flex items-center justify-end gap-3">
+          <SignedIn>
+            <div className="hidden md:flex items-center gap-2 rounded-xl border border-border-custom bg-surface px-2.5 py-1.5">
+              <UserButton afterSignOutUrl="/sign-in" />
+              <span className="max-w-[140px] truncate text-sm font-dm font-semibold text-charcoal">
+                {profileName}
+              </span>
+            </div>
+          </SignedIn>
+          <SignedOut>
+            <SignInButton mode="modal">
+              <button className="rounded-xl bg-forest px-3 py-2 text-sm font-semibold text-white hover:bg-forest-light transition-colors">
+                Sign in
+              </button>
+            </SignInButton>
+          </SignedOut>
           <button className="relative p-2.5 bg-surface border border-border-custom hover:border-forest/50 rounded-xl transition-all hover:shadow-sm">
             <Bell className="w-4 h-4 text-charcoal" />
             <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-danger border border-white rounded-full" />

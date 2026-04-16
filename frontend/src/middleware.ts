@@ -4,15 +4,9 @@ import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 const isPublicRoute = createRouteMatcher(["/", "/sign-in(.*)", "/sign-up(.*)", "/api(.*)"]);
 
 export default clerkMiddleware(async (auth, request) => {
-  if (process.env.NODE_ENV !== "production") return;
-
-  const { userId, redirectToSignIn } = await auth();
-
   if (isPublicRoute(request)) return;
 
-  if (!userId) {
-    return redirectToSignIn();
-  }
+  await auth().protect();
 });
 
 export const config = {
