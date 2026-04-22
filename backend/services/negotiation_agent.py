@@ -9,7 +9,7 @@ import traceback
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 
-import google.generativeai as genai
+from services.ai_client import call_llm, call_llm_json, MODEL_SMART, MODEL_PRO
 from config import settings
 from database.models.property import Property
 from database.models.negotiation import Negotiation, Message
@@ -34,10 +34,7 @@ class NegotiationAgent:
     """
 
     def __init__(self):
-        if settings.gemini_api_key:
-            genai.configure(api_key=settings.gemini_api_key)
-        self.model_pro = genai.GenerativeModel("gemini-3-flash-preview")
-        self.model_flash = genai.GenerativeModel("gemini-3-flash-preview")
+        pass  # ai_client handles auth
 
     # ──────────────── Phase 1: Market Research ────────────────
 
@@ -140,8 +137,7 @@ Write a natural, conversational message (3-5 sentences). Include:
 Do NOT use any markdown formatting. Write as a plain WhatsApp/SMS message.
 """
         try:
-            response = self.model_pro.generate_content(prompt)
-            return response.text.strip()
+            return await call_llm(prompt, model=MODEL_PRO)
         except Exception as e:
             print(f"[NegotiationAgent] Gemini error in opening: {e}")
             return (
@@ -188,16 +184,10 @@ Analyze and respond in this EXACT JSON format:
 Return ONLY valid JSON, no markdown.
 """
         try:
-            response = self.model_flash.generate_content(prompt)
-            text = response.text.strip()
-            if text.startswith("```"):
-                text = text.split("\n", 1)[1] if "\n" in text else text
-                if text.endswith("```"):
-                    text = text[:-3]
-                text = text.strip()
-                if text.startswith("json"):
-                    text = text[4:].strip()
-            return json.loads(text)
+            result = await call_llm_json(prompt, model=MODEL_SMART)
+            if not isinstance(result, dict):
+                raise ValueError("not dict")
+            return result
         except Exception as e:
             print(f"[NegotiationAgent] Analysis parse error: {e}")
             return {
@@ -267,8 +257,7 @@ Tone: {tone_map.get(tone, tone_map['balanced'])}
 Write a natural response (2-4 sentences). Reference the broker's last message. State the new offer clearly. No markdown.
 """
         try:
-            response = self.model_pro.generate_content(prompt)
-            message_text = response.text.strip()
+            message_text = await call_llm(prompt, model=MODEL_SMART)
         except Exception:
             message_text = (
                 f"I appreciate your response. After further consideration, we'd like to offer ₹{new_offer:,}/month. "

@@ -33,6 +33,9 @@ export function AgentProgress({ location, bhk, onComplete }: AgentProgressProps)
 
   const wsRef = useRef<WebSocket | null>(null);
   const logsEndRef = useRef<HTMLDivElement | null>(null);
+  // Refs to avoid stale closures in WS callbacks
+  const isCompleteRef = useRef(false);
+  const progressRef = useRef(0);
 
   // Auto-scroll logs
   useEffect(() => {
@@ -54,7 +57,10 @@ export function AgentProgress({ location, bhk, onComplete }: AgentProgressProps)
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        if (data.progress !== undefined) setProgress(data.progress);
+        if (data.progress !== undefined) {
+          setProgress(data.progress);
+          progressRef.current = data.progress;
+        }
         if (data.status) {
           setStatus(data.status);
           setLogs((prev) => [...prev, data.status]);
@@ -64,6 +70,7 @@ export function AgentProgress({ location, bhk, onComplete }: AgentProgressProps)
         }
 
         if (data.progress >= 100) {
+          isCompleteRef.current = true;
           setIsComplete(true);
           setTimeout(() => {
             onComplete?.();
@@ -79,27 +86,38 @@ export function AgentProgress({ location, bhk, onComplete }: AgentProgressProps)
       setLogs((prev) => [...prev, "⚠️ WebSocket error"]);
     };
 
-    ws.onclose = (e) => {
-      if (!isComplete && progress < 100) {
+    ws.onclose = () => {
+      // Use refs — avoids stale closure over state values
+      if (!isCompleteRef.current && progressRef.current < 100) {
         setError("Connection lost. Click retry to reconnect.");
         setLogs((prev) => [...prev, "⚠️ WebSocket disconnected"]);
       }
     };
 
     return ws;
-  }, [location, bhk, onComplete, isComplete, progress]);
+  }, [location, bhk, onComplete]);
 
   useEffect(() => {
     const ws = connectWs();
 
     return () => {
-      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+      // Only close if actually open — closing a CONNECTING socket throws
+      // the "WebSocket closed before connection established" error
+      if (ws.readyState === WebSocket.OPEN) {
         ws.close();
+      } else {
+        // For CONNECTING state: mark it so onopen won't send and onclose is a no-op
+        ws.onopen = null;
+        ws.onclose = null;
+        ws.onerror = null;
+        ws.onmessage = null;
       }
     };
   }, [retryCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleRetry = () => {
+    isCompleteRef.current = false;
+    progressRef.current = 0;
     setError(null);
     setProgress(0);
     setStatus("Reconnecting...");

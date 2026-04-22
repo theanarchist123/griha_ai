@@ -8,7 +8,7 @@ import traceback
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 
-import google.generativeai as genai
+from services.ai_client import call_llm_json, MODEL_SMART
 from config import settings
 from database.models.property import Property
 from database.models.match import Match
@@ -23,9 +23,7 @@ class MatchingAgent:
     """
 
     def __init__(self):
-        if settings.gemini_api_key:
-            genai.configure(api_key=settings.gemini_api_key)
-        self.model = genai.GenerativeModel("gemini-3-flash-preview")
+        pass  # ai_client handles auth
 
     async def run_matching(self, user_id: str, profile: SearchProfile) -> List[Match]:
         """
@@ -153,16 +151,10 @@ Return JSON array:
 Return ONLY valid JSON. No markdown.
 """
         try:
-            response = self.model.generate_content(prompt)
-            raw = response.text.strip()
-            if raw.startswith("```"):
-                raw = raw.split("\n", 1)[1] if "\n" in raw else raw
-                if raw.endswith("```"):
-                    raw = raw[:-3]
-                raw = raw.strip()
-                if raw.startswith("json"):
-                    raw = raw[4:].strip()
-            scores = json.loads(raw)
+            result = await call_llm_json(prompt, model=MODEL_SMART)
+            if not isinstance(result, list):
+                raise ValueError("not list")
+            scores = result
         except Exception as e:
             print(f"[MatchingAgent] Scoring error: {e}")
             traceback.print_exc()

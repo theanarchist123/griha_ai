@@ -14,6 +14,14 @@ router = APIRouter(prefix="/api/negotiation", tags=["Negotiation"])
 negotiation_agent = NegotiationAgent()
 
 
+def _prop_id(ref):
+    """Safely extract ObjectId from a Beanie Link or plain id."""
+    from beanie.odm.fields import Link
+    if isinstance(ref, Link):
+        return ref.ref.id
+    return ref
+
+
 class NegotiationStartRequest(BaseModel):
     property_id: str
     clerk_id: Optional[str] = None
@@ -89,7 +97,7 @@ async def get_negotiation(negotiation_id: str):
     if not neg:
         raise HTTPException(404, "Negotiation not found")
 
-    prop = await Property.get(neg.property)
+    prop = await Property.get(_prop_id(neg.property))
     strategy = None
     if prop:
         strategy = await negotiation_agent.get_strategy_dashboard(neg, prop)
@@ -140,7 +148,7 @@ async def simulate_broker_response(negotiation_id: str, req: BrokerResponseReque
 
     # Fetch updated negotiation
     neg = await Negotiation.get(ObjectId(negotiation_id))
-    prop = await Property.get(neg.property) if neg else None
+    prop = await Property.get(_prop_id(neg.property)) if neg else None
 
     return {
         "status": "success",

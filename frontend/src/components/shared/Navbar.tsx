@@ -125,9 +125,12 @@ interface DashboardTopBarProps {
 }
 
 export function DashboardTopBar({ filters, onApplyFilters }: DashboardTopBarProps) {
+  const defaultFilters: DashboardSearchFilters = { location: "", bhk: "Any BHK", gated: false, pet: false, parking: false };
+  const safeFilters = filters || defaultFilters;
+  
   const { user, isSignedIn } = useUser();
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
-  const [draftFilters, setDraftFilters] = useState<DashboardSearchFilters>(filters);
+  const [draftFilters, setDraftFilters] = useState<DashboardSearchFilters>(safeFilters);
   const [locationSuggestions, setLocationSuggestions] = useState<string[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [locating, setLocating] = useState(false);
@@ -135,7 +138,7 @@ export function DashboardTopBar({ filters, onApplyFilters }: DashboardTopBarProp
   const searchRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setDraftFilters(filters);
+    setDraftFilters(filters || defaultFilters);
   }, [filters]);
 
   // Close search when clicking outside

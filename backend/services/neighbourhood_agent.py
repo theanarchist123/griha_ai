@@ -9,7 +9,7 @@ import traceback
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
 
-import google.generativeai as genai
+from services.ai_client import call_llm_json, call_llm, MODEL_SMART, MODEL_PRO
 import httpx
 from config import settings
 from database.models.neighbourhood_report import NeighbourhoodReport
@@ -23,9 +23,7 @@ class NeighbourhoodAgent:
     """
 
     def __init__(self):
-        if settings.gemini_api_key:
-            genai.configure(api_key=settings.gemini_api_key)
-        self.model = genai.GenerativeModel("gemini-3-flash-preview")
+        pass  # no client needed — ai_client handles auth
 
     async def get_or_generate_report(
         self,
@@ -177,8 +175,8 @@ Return this EXACT JSON structure:
 Return ONLY valid JSON for {locality}, {city}. Use REAL place names. Be specific and accurate.
 """
         try:
-            response = self.model.generate_content(prompt)
-            raw = response.text.strip()
+            raw = await call_llm(prompt, model=MODEL_SMART)
+            raw = raw.strip()
             # Clean markdown
             if raw.startswith("```"):
                 raw = raw.split("\n", 1)[1] if "\n" in raw else raw

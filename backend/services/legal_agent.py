@@ -8,7 +8,7 @@ import traceback
 from datetime import datetime
 from typing import Optional, Dict, Any
 
-import google.generativeai as genai
+from services.ai_client import call_llm, call_llm_json, MODEL_PRO, MODEL_FAST
 from config import settings
 from database.models.property import Property
 from database.models.legal_report import LegalReport
@@ -22,9 +22,7 @@ class LegalAgent:
     """
 
     def __init__(self):
-        if settings.gemini_api_key:
-            genai.configure(api_key=settings.gemini_api_key)
-        self.model = genai.GenerativeModel("gemini-3-flash-preview")
+        pass  # ai_client handles auth
 
     async def analyze_property(self, property_doc: Property, user_id: Optional[str] = None) -> LegalReport:
         """
@@ -150,8 +148,7 @@ Respond in this EXACT JSON format:
 Return ONLY valid JSON, no markdown formatting.
 """
         try:
-            response = self.model.generate_content(prompt)
-            return response.text
+            return await call_llm(prompt, model=MODEL_PRO)
         except Exception as e:
             print(f"[LegalAgent] Gemini error: {e}")
             traceback.print_exc()
@@ -221,8 +218,7 @@ Builder: {parsed.get('builder_track_record', {}).get('status', 'Unknown')} — {
 Start with the overall verdict. Be direct and actionable. Use simple language.
 """
         try:
-            response = self.model.generate_content(prompt)
-            return response.text.strip()
+            return await call_llm(prompt, model=MODEL_FAST)
         except Exception:
             verdicts = {
                 "clean": f"This property has a clean legal standing. Safe to proceed with {prop.bhk} in {prop.locality}.",

@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     # API Keys
     clerk_secret_key: Optional[str] = None
     gemini_api_key: Optional[str] = None
+    ollama_api_key: Optional[str] = None
     unsplash_access_key: Optional[str] = None
     ocr_space_api_key: Optional[str] = None
     google_maps_api_key: Optional[str] = None

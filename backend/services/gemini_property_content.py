@@ -1,23 +1,16 @@
-import asyncio
 import json
 from datetime import datetime
 from typing import Any
 
-import google.generativeai as genai
-
+from services.ai_client import call_llm_json, call_llm, MODEL_SMART, MODEL_FAST
 from config import settings
 from database.models.property import Property
 
 
 class GeminiPropertyContentService:
 	def __init__(self):
-		self._enabled = bool(settings.gemini_api_key)
-		self._model_name = "gemini-3-flash-preview"
-		self._model = None
-
-		if self._enabled:
-			genai.configure(api_key=settings.gemini_api_key)
-			self._model = genai.GenerativeModel(self._model_name)
+		self._enabled = True
+		self._model_name = MODEL_SMART
 
 	def _build_fallback(self, prop: Property, retrieval_notes: list[str]) -> dict[str, Any]:
 		locality = prop.locality or "the selected locality"
@@ -124,24 +117,9 @@ class GeminiPropertyContentService:
 			return []
 
 	async def _call_gemini(self, prompt: str) -> dict[str, Any] | None:
-		if not self._model:
-			return None
-
-		def _sync_generate() -> str:
-			response = self._model.generate_content(prompt)
-			return (response.text or "").strip()
-
-		raw = await asyncio.to_thread(_sync_generate)
-		if not raw:
-			return None
-
 		try:
-			cleaned = raw
-			if cleaned.startswith("```"):
-				cleaned = cleaned.strip("`")
-				cleaned = cleaned.replace("json\n", "", 1).strip()
-			return json.loads(cleaned)
-		except json.JSONDecodeError:
+			return await call_llm_json(prompt, model=MODEL_SMART)
+		except Exception:
 			return None
 
 	def _coerce_payload(self, payload: dict[str, Any], fallback: dict[str, Any]) -> dict[str, Any]:

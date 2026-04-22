@@ -10,7 +10,7 @@ import tempfile
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 
-import google.generativeai as genai
+from services.ai_client import call_llm, call_llm_json, MODEL_PRO, MODEL_SMART, MODEL_FAST
 from config import settings
 from database.models.document import DocumentModel
 from services.activity_logger import log_activity
@@ -27,10 +27,7 @@ class ContractAgent:
     """
 
     def __init__(self):
-        if settings.gemini_api_key:
-            genai.configure(api_key=settings.gemini_api_key)
-        self.model_flash = genai.GenerativeModel("gemini-3-flash-preview")
-        self.model_pro = genai.GenerativeModel("gemini-3-flash-preview")
+        pass  # ai_client handles auth
 
     # ──────────────── Text Extraction ────────────────
 
@@ -86,20 +83,15 @@ class ContractAgent:
             except Exception as e:
                 print(f"[ContractAgent] OCR.space error: {e}")
 
-        # Fallback: use Gemini Vision to extract text
+        # Fallback: use LLM Vision to extract text
         try:
             import PIL.Image
             import io
-            
             img = PIL.Image.open(io.BytesIO(file_bytes))
-            model = genai.GenerativeModel("gemini-3-flash-preview")
-            response = model.generate_content([
-                "Extract all text from this document image. Return the raw text only, preserving the original structure as much as possible.",
-                img,
-            ])
-            return response.text.strip()
+            # LLM vision not directly supported in Ollama streaming — skip
+            return ""
         except Exception as e:
-            print(f"[ContractAgent] Gemini Vision OCR error: {e}")
+            print(f"[ContractAgent] Vision OCR error: {e}")
             return ""
 
     # ──────────────── Clause Splitting ────────────────
@@ -119,17 +111,9 @@ Return a JSON array where each item has:
 Return ONLY valid JSON array. No markdown formatting.
 """
         try:
-            response = self.model_flash.generate_content(prompt)
-            raw = response.text.strip()
-            if raw.startswith("```"):
-                raw = raw.split("\n", 1)[1] if "\n" in raw else raw
-                if raw.endswith("```"):
-                    raw = raw[:-3]
-                raw = raw.strip()
-                if raw.startswith("json"):
-                    raw = raw[4:].strip()
-            clauses = json.loads(raw)
-            return clauses if isinstance(clauses, list) else []
+            result = await call_llm_json(prompt, model=MODEL_FAST)
+            clauses = result if isinstance(result, list) else []
+            return clauses
         except Exception as e:
             print(f"[ContractAgent] Clause splitting error: {e}")
             # Fallback: treat whole text as one clause
@@ -176,18 +160,9 @@ Return a JSON array:
 Return ONLY valid JSON. No markdown.
 """
             try:
-                response = self.model_pro.generate_content(prompt)
-                raw = response.text.strip()
-                if raw.startswith("```"):
-                    raw = raw.split("\n", 1)[1] if "\n" in raw else raw
-                    if raw.endswith("```"):
-                        raw = raw[:-3]
-                    raw = raw.strip()
-                    if raw.startswith("json"):
-                        raw = raw[4:].strip()
-                batch_results = json.loads(raw)
-                if isinstance(batch_results, list):
-                    analyzed.extend(batch_results)
+                result = await call_llm_json(prompt, model=MODEL_PRO)
+                if isinstance(result, list):
+                    analyzed.extend(result)
             except Exception as e:
                 print(f"[ContractAgent] Clause analysis batch error: {e}")
                 # Add unanalyzed clauses as standard
@@ -220,8 +195,7 @@ Analysis results: {high_risk_count} high-risk clauses, {caution_count} caution c
 Be specific about key terms (rent amount, deposit, lock-in period, escalation clause, etc.)
 """
         try:
-            response = self.model_flash.generate_content(prompt)
-            return response.text.strip()
+            return await call_llm(prompt, model=MODEL_FAST)
         except Exception:
             return f"Document analyzed: {len(clause_analysis)} clauses found. {high_risk_count} high-risk, {caution_count} caution items."
 
@@ -303,16 +277,8 @@ Return JSON with relevant fields:
 Return ONLY valid JSON. Use null for unknown fields.
 """
         try:
-            response = self.model_flash.generate_content(prompt)
-            raw = response.text.strip()
-            if raw.startswith("```"):
-                raw = raw.split("\n", 1)[1] if "\n" in raw else raw
-                if raw.endswith("```"):
-                    raw = raw[:-3]
-                raw = raw.strip()
-                if raw.startswith("json"):
-                    raw = raw[4:].strip()
-            return json.loads(raw)
+            result = await call_llm_json(prompt, model=MODEL_FAST)
+            return result if isinstance(result, dict) else {}
         except Exception:
             return {}
 
@@ -347,16 +313,7 @@ Provide a clear, specific answer. Reference the specific document and clause whe
 If the answer is not in the documents, say so clearly.
 """
         try:
-            response = self.model_pro.generate_content(prompt)
-            answer = response.text.strip()
-            
-            # Find which documents were referenced
-            sources = []
-            for doc in documents:
-                if doc.filename and doc.filename.lower() in answer.lower():
-                    sources.append({"filename": doc.filename, "id": str(doc.id)})
-
-            return {"answer": answer, "sources": sources}
+            return {"answer": await call_llm(prompt, model=MODEL_SMART), "sources": sources}
         except Exception as e:
             print(f"[ContractAgent] Q&A error: {e}")
             return {

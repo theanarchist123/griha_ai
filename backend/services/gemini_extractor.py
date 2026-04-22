@@ -1,61 +1,19 @@
 """
 Gemini-powered property research and extraction.
-
-Two modes:
-1. RESEARCH — Ask Gemini to provide real property listings for a location
-   using its knowledge. Returns actual society names, realistic prices,
-   and real amenities. This is the PRIMARY data source (always works).
-2. EXTRACT — Parse structured data from raw web page text (secondary).
+Now uses Ollama Cloud via centralised ai_client.
 """
-
-import asyncio
 import json
 import re
 from typing import Any, Optional
 
-import google.generativeai as genai
-
-from config import settings
+from services.ai_client import call_llm_json, call_llm, MODEL_SMART, MODEL_FAST
 
 
 class GeminiExtractor:
-    """Uses Gemini for property research and extraction."""
-
-    def __init__(self):
-        self._enabled = bool(settings.gemini_api_key)
-        self._model = None
-        if self._enabled:
-            genai.configure(api_key=settings.gemini_api_key)
-            self._model = genai.GenerativeModel("gemini-3-flash-preview")
+    """Uses Ollama for property research and extraction."""
 
     # ------------------------------------------------------------------
-    # Internal LLM call
-    # ------------------------------------------------------------------
-
-    async def _call(self, prompt: str) -> Optional[Any]:
-        if not self._model:
-            return None
-        try:
-            response = await asyncio.to_thread(
-                self._model.generate_content, prompt
-            )
-            text = (response.text or "").strip()
-            if not text:
-                return None
-
-            # Extract JSON from response
-            json_match = re.search(r"[\[{].*[\]}]", text, re.DOTALL)
-            if json_match:
-                return json.loads(json_match.group())
-            return None
-        except json.JSONDecodeError:
-            return None
-        except Exception as e:
-            print(f"  [gemini] API error: {e}")
-            return None
-
-    # ------------------------------------------------------------------
-    # PRIMARY: Research real properties using Gemini's knowledge
+    # PRIMARY: Research real properties
     # ------------------------------------------------------------------
 
     async def research_properties(
@@ -65,19 +23,9 @@ class GeminiExtractor:
         bhk: str,
         count: int = 8,
     ) -> list[dict]:
-        """
-        Ask Gemini to provide data about REAL residential properties
-        in the given location. Returns actual society names with
-        realistic market pricing.
-        
-        This is the reliable primary data source.
-        """
-        if not self._enabled:
-            return []
-
         prompt = f"""You are an Indian real estate data researcher.
 
-List exactly {count} REAL residential apartment societies/complexes in {locality}, {city}, India 
+List exactly {count} REAL residential apartment societies/complexes in {locality}, {city}, India
 that commonly have {bhk} apartments available for rent.
 
 REQUIREMENTS:
@@ -107,7 +55,7 @@ IMPORTANT:
 - amenities must be an array of 3-6 strings
 - Return ONLY the JSON array, no explanation"""
 
-        result = await self._call(prompt)
+        result = await call_llm_json(prompt, model=MODEL_SMART)
         if not isinstance(result, list):
             return []
 
@@ -126,7 +74,6 @@ IMPORTANT:
             except (TypeError, ValueError):
                 continue
 
-            # Clean the society name
             name = str(name).strip().strip('"').strip("'")
             name = re.sub(r"^(?:in|at|near|of)\s+", "", name, flags=re.IGNORECASE).strip()
             if len(name) < 3:
@@ -163,15 +110,11 @@ IMPORTANT:
         locality: str = "",
         city: str = "",
     ) -> Optional[dict]:
-        if not self._enabled:
-            return None
-
         trimmed = page_text[:5000]
         prompt = f"""Extract property listing details from this web page content.
 
 Page Title: {page_title}
 Search Title: {search_title}
-Search Snippet: {search_snippet}
 URL: {source_url}
 Context: Looking for {fallback_bhk} in {locality}, {city}
 
@@ -198,7 +141,7 @@ Rules:
 - price must be the MONTHLY RENT, not sale price.
 - Return ONLY JSON."""
 
-        result = await self._call(prompt)
+        result = await call_llm_json(prompt, model=MODEL_FAST)
         if not isinstance(result, dict):
             return None
         return self._clean_extraction(result)
@@ -211,9 +154,6 @@ Rules:
         fallback_bhk: str,
         locality: str,
     ) -> Optional[dict]:
-        if not self._enabled:
-            return None
-
         prompt = f"""Extract property listing data from this search result.
 
 Title: {search_title}
@@ -231,7 +171,7 @@ Return STRICT JSON:
 
 Return ONLY JSON."""
 
-        result = await self._call(prompt)
+        result = await call_llm_json(prompt, model=MODEL_FAST)
         if not result or not isinstance(result, dict):
             return None
 
@@ -257,8 +197,6 @@ Return ONLY JSON."""
             "description": str(result["description"])[:300] if result.get("description") else None,
         }
 
-    # ------------------------------------------------------------------
-    # Helpers
     # ------------------------------------------------------------------
 
     def _clean_extraction(self, result: dict) -> dict:
