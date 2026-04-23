@@ -21,10 +21,12 @@ class LegalAnalyzeRequest(BaseModel):
 @router.post("/analyze")
 async def analyze_property_legal(req: LegalAnalyzeRequest, background_tasks: BackgroundTasks):
     """Trigger legal analysis for a property. Returns immediately, runs in background."""
-    if not ObjectId.is_valid(req.property_id):
-        raise HTTPException(400, "Invalid property ID")
-
-    prop = await Property.get(ObjectId(req.property_id))
+    prop = None
+    if ObjectId.is_valid(req.property_id):
+        prop = await Property.get(ObjectId(req.property_id))
+    if not prop:
+        prop = await Property.find_one(Property.external_id == req.property_id)
+        
     if not prop:
         raise HTTPException(404, "Property not found")
 
@@ -56,11 +58,12 @@ async def analyze_property_legal(req: LegalAnalyzeRequest, background_tasks: Bac
 @router.get("/report/{property_id}")
 async def get_legal_report(property_id: str):
     """Fetch the legal report for a property. Generates on-demand if missing."""
-    if not ObjectId.is_valid(property_id):
-        raise HTTPException(400, "Invalid property ID")
-
-    # Try to find existing report
-    prop = await Property.get(ObjectId(property_id))
+    prop = None
+    if ObjectId.is_valid(property_id):
+        prop = await Property.get(ObjectId(property_id))
+    if not prop:
+        prop = await Property.find_one(Property.external_id == property_id)
+        
     if not prop:
         raise HTTPException(404, "Property not found")
 

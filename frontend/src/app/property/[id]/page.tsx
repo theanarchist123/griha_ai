@@ -402,6 +402,21 @@ export default function PropertyDetailPage() {
                 </a>
               )}
             </div>
+
+            <div className="flex gap-3 pt-4 border-t border-border-custom mt-2">
+              <Link 
+                href={`/legal/${propertyId}`} 
+                className="flex-1 text-center bg-forest text-white py-3 rounded-xl font-dm font-semibold hover:bg-forest-light transition-colors"
+              >
+                Verify Legal Docs
+              </Link>
+              <Link 
+                href={`/negotiate/${propertyId}`} 
+                className="flex-1 text-center border-2 border-forest text-forest py-3 rounded-xl font-dm font-semibold hover:bg-forest/5 transition-colors"
+              >
+                Negotiate
+              </Link>
+            </div>
           </div>
         </div>
 

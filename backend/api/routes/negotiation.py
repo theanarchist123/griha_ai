@@ -42,10 +42,12 @@ class SettingsUpdateRequest(BaseModel):
 @router.post("/start")
 async def start_negotiation(req: NegotiationStartRequest):
     """Start a new negotiation for a property."""
-    if not ObjectId.is_valid(req.property_id):
-        raise HTTPException(400, "Invalid property ID")
-
-    prop = await Property.get(ObjectId(req.property_id))
+    prop = None
+    if ObjectId.is_valid(req.property_id):
+        prop = await Property.get(ObjectId(req.property_id))
+    if not prop:
+        prop = await Property.find_one(Property.external_id == req.property_id)
+        
     if not prop:
         raise HTTPException(404, "Property not found")
 
@@ -112,10 +114,12 @@ async def get_negotiation(negotiation_id: str):
 @router.get("/property/{property_id}")
 async def get_negotiation_by_property(property_id: str):
     """Fetch negotiation by property ID."""
-    if not ObjectId.is_valid(property_id):
-        raise HTTPException(400, "Invalid property ID")
-
-    prop = await Property.get(ObjectId(property_id))
+    prop = None
+    if ObjectId.is_valid(property_id):
+        prop = await Property.get(ObjectId(property_id))
+    if not prop:
+        prop = await Property.find_one(Property.external_id == property_id)
+        
     if not prop:
         raise HTTPException(404, "Property not found")
 

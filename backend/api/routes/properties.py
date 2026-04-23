@@ -148,23 +148,25 @@ async def search_properties(
 
 @router.get("/{property_id}")
 async def get_property(property_id: str):
-    if not ObjectId.is_valid(property_id):
-        raise HTTPException(status_code=400, detail="Invalid ID format")
-    
-    property = await Property.get(ObjectId(property_id))
-    if not property:
+    prop = None
+    if ObjectId.is_valid(property_id):
+        prop = await Property.get(ObjectId(property_id))
+    if not prop:
+        prop = await Property.find_one(Property.external_id == property_id)
+
+    if not prop:
         raise HTTPException(status_code=404, detail="Property not found")
 
-    if not property.ai_detail_overview or not property.ai_card_summary:
+    if not prop.ai_detail_overview or not prop.ai_card_summary:
         try:
-            property = await content_service.enrich_property(property)
+            prop = await content_service.enrich_property(prop)
         except Exception:
             # Even if save fails, return factual generated content in this response.
             try:
-                generated = await content_service.generate_content(property)
+                generated = await content_service.generate_content(prop)
                 for key, value in generated.items():
-                    setattr(property, key, value)
+                    setattr(prop, key, value)
             except Exception:
                 pass
         
-    return {"status": "success", "data": property}
+    return {"status": "success", "data": prop}
