@@ -7,15 +7,7 @@ pydantic-settings
 python-jose
 python-multipart
 httpx
-playwright
-apscheduler
-google-generativeai
-langchain
-langchain-google-genai
-langchain-mongodb
-langchain-community
-langgraph
-pymupdf
+
 requests
 cloudinary
 resend
