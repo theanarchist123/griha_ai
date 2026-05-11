@@ -234,7 +234,7 @@ export default function DashboardPage() {
     setLoading(false);
 
     const clientId = Math.random().toString(36).substring(7);
-    const ws = new WebSocket(`ws://localhost:8000/api/ws/scrape-progress/${clientId}`);
+    const ws = new WebSocket(`ws://127.0.0.1:8000/api/ws/scrape-progress/${clientId}`);
 
     ws.onopen = () => {
       setScrapeStatus("🔍 Connected! Starting live property search...");
@@ -299,8 +299,8 @@ export default function DashboardPage() {
         if (filters.parking) params.set("parking", "true");
 
         const searchUrl = params.toString()
-          ? `http://localhost:8000/api/properties/search?${params.toString()}`
-          : "http://localhost:8000/api/properties/search";
+          ? `http://127.0.0.1:8000/api/properties/search?${params.toString()}`
+          : "http://127.0.0.1:8000/api/properties/search";
 
         const searchRes = await fetch(searchUrl);
         const searchJson = await searchRes.json();
@@ -327,7 +327,7 @@ export default function DashboardPage() {
 
         // Only fallback when there are no active filters
         if (apiProperties.length === 0 && !hasActiveFilters) {
-          const allRes = await fetch("http://localhost:8000/api/properties/");
+          const allRes = await fetch("http://127.0.0.1:8000/api/properties/");
           const allJson = await allRes.json();
           apiProperties = Array.isArray(allJson.data) ? allJson.data : [];
         }

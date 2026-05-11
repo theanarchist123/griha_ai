@@ -76,7 +76,7 @@ export default function OnboardingPage() {
       return;
     }
     try {
-      const res = await fetch(`http://localhost:8000/api/locations/autocomplete?q=${encodeURIComponent(query)}`);
+      const res = await fetch(`http://127.0.0.1:8000/api/locations/autocomplete?q=${encodeURIComponent(query)}`);
       if (res.ok) {
         const data = await res.json();
         setLocationSuggestions(Array.isArray(data) ? data.slice(0, 8) : []);

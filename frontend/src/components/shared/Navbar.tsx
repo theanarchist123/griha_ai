@@ -163,7 +163,7 @@ export function DashboardTopBar({ filters, onApplyFilters }: DashboardTopBarProp
       try {
         setLoadingSuggestions(true);
         const res = await fetch(
-          `http://localhost:8000/api/locations/autocomplete?q=${encodeURIComponent(draftFilters.location.trim())}`,
+          `http://127.0.0.1:8000/api/locations/autocomplete?q=${encodeURIComponent(draftFilters.location.trim())}`,
           { signal: controller.signal }
         );
 
@@ -215,7 +215,7 @@ export function DashboardTopBar({ filters, onApplyFilters }: DashboardTopBarProp
             lon: String(position.coords.longitude),
           });
 
-          const response = await fetch(`http://localhost:8000/api/locations/reverse?${params.toString()}`);
+          const response = await fetch(`http://127.0.0.1:8000/api/locations/reverse?${params.toString()}`);
           if (!response.ok) {
             throw new Error("reverse_geocode_failed");
           }
@@ -314,7 +314,10 @@ export function DashboardTopBar({ filters, onApplyFilters }: DashboardTopBarProp
                   type="text"
                   placeholder="Where do you want to live?"
                   value={draftFilters.location}
-                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, location: e.target.value }))}
+                  onChange={(e) => {
+                    setDraftFilters((prev) => ({ ...prev, location: e.target.value }));
+                    if (!isSearchExpanded) setIsSearchExpanded(true);
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();

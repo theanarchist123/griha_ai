@@ -3,7 +3,7 @@ from typing import List
 import json
 import asyncio
 import traceback
-from services.scraper_agent import ScraperAgent
+from services.property_fetcher import PropertyFetcher
 
 router = APIRouter(prefix="/api/ws", tags=["WebSockets"])
 
@@ -49,7 +49,7 @@ async def scrape_progress(websocket: WebSocket, client_id: str):
                 location = req_data.get("location", "Unknown Location")
                 bhk = req_data.get("bhk", "Any BHK")
 
-                scraper = ScraperAgent(websocket)
+                scraper = PropertyFetcher(websocket)
 
                 # Run scraping in a task with error handling
                 async def _run_scrape():
