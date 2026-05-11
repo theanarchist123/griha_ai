@@ -14,11 +14,7 @@ const ONBOARDING_IMAGES = [
   STATIC_IMAGES.onboarding5,
 ];
 
-const PREFERENCES = [
-  "Metro nearby", "No broker", "Pet friendly", "Furnished",
-  "Parking", "Quiet area", "Gated society", "Near school",
-  "Work from home friendly", "Good natural light",
-];
+
 
 const QUOTES = [
   "Home is not a place, it's a feeling.",
@@ -66,7 +62,7 @@ export default function OnboardingPage() {
   const [city, setCity] = useState("");
   const [citySearch, setCitySearch] = useState("");
   const [locationSuggestions, setLocationSuggestions] = useState<string[]>([]);
-  const [selectedPrefs, setSelectedPrefs] = useState<string[]>([]);
+  const [selectedPrefs] = useState<string[]>([]);
   const [dealBreakers, setDealBreakers] = useState("");
   const [bhk, setBhk] = useState<string>("");
 

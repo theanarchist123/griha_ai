@@ -120,15 +120,15 @@ export interface DashboardSearchFilters {
 }
 
 interface DashboardTopBarProps {
-  filters: DashboardSearchFilters;
-  onApplyFilters: (filters: DashboardSearchFilters) => void;
+  filters?: DashboardSearchFilters;
+  onApplyFilters?: (filters: DashboardSearchFilters) => void;
 }
 
-export function DashboardTopBar({ filters, onApplyFilters }: DashboardTopBarProps) {
+export function DashboardTopBar({ filters, onApplyFilters }: DashboardTopBarProps = {}) {
   const defaultFilters: DashboardSearchFilters = { location: "", bhk: "Any BHK", gated: false, pet: false, parking: false };
   const safeFilters = filters || defaultFilters;
   
-  const { user, isSignedIn } = useUser();
+  const { user } = useUser();
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const [draftFilters, setDraftFilters] = useState<DashboardSearchFilters>(safeFilters);
   const [locationSuggestions, setLocationSuggestions] = useState<string[]>([]);
@@ -229,7 +229,7 @@ export function DashboardTopBar({ filters, onApplyFilters }: DashboardTopBarProp
 
           const nextFilters = { ...draftFilters, location: detectedLocation };
           setDraftFilters(nextFilters);
-          onApplyFilters(nextFilters);
+          onApplyFilters?.(nextFilters);
           setIsSearchExpanded(false);
           setLocationSuggestions([]);
           setLocationStatus(`Showing properties near ${detectedLocation}`);
@@ -259,7 +259,7 @@ export function DashboardTopBar({ filters, onApplyFilters }: DashboardTopBarProp
   };
 
   const applyFilters = () => {
-    onApplyFilters(draftFilters);
+    onApplyFilters?.(draftFilters);
     setIsSearchExpanded(false);
     setLocationSuggestions([]);
   };

@@ -523,7 +523,7 @@ export default function NeighbourhoodExplorerPage() {
                 }}
               >
                 <p className="text-xs font-dm" style={{ color: "rgba(255,255,255,0.5)" }}>
-                  Ask AI to show nearby places or routes — they'll appear here
+                  Ask AI to show nearby places or routes — they&apos;ll appear here
                 </p>
               </motion.div>
             )}

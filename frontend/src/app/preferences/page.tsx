@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useAuth } from "@clerk/nextjs";
-import { Pencil, X, Check, MapPin, Wallet, Heart, Ban, Navigation, Bell, Loader2, Save } from "lucide-react";
+import { Pencil, Check, MapPin, Wallet, Heart, Ban, Navigation, Bell, Loader2, Save } from "lucide-react";
 import { DashboardSidebar, DashboardTopBar } from "@/components/shared/Navbar";
 
 interface PreferencesData {
@@ -53,7 +53,7 @@ export default function PreferencesPage() {
       if (json.status === "success" && json.data) {
         setPrefs(json.data);
       }
-    } catch (err) {
+    } catch {
       // No profile yet
     } finally {
       setLoading(false);
@@ -84,7 +84,7 @@ export default function PreferencesPage() {
       } else {
         setErrorMsg(json.detail || "Failed to save");
       }
-    } catch (err) {
+    } catch {
       setErrorMsg("Failed to connect to server");
     } finally {
       setSaving(false);

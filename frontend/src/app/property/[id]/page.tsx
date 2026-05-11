@@ -29,6 +29,7 @@ function parseId(value: unknown): string | null {
   return null;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function normalizeProperty(raw: any): Property {
   const rawTitle = typeof raw?.title === "string" ? raw.title.trim() : "";
   const genericTitle = /(flats?\s+for\s+rent|price\s+range|\bis\s+available\b|verified\s+\d+\+?\s*bhk\s*flats?|listings?|living\s+room\s+property|perfect\s+blend|semi\s+furnished\s+apartment)/i.test(rawTitle);
@@ -214,7 +215,7 @@ export default function PropertyDetailPage() {
       setError(null);
 
       try {
-        const res = await fetch(`http://localhost:8000/api/properties/${propertyId}`);
+        const res = await fetch(`http://127.0.0.1:8000/api/properties/${propertyId}`);
         const json = await res.json();
         if (!res.ok || json?.status !== "success" || !json?.data) {
           throw new Error(json?.detail || "Failed to fetch property details.");
