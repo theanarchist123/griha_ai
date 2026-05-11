@@ -33,7 +33,7 @@ export default function ComparePage() {
       try {
         const fetchedProps = await Promise.all(
           ids.map(async (id) => {
-            const res = await fetch(`http://127.0.0.1:8000/api/properties/${id}`);
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/api/properties/${id}`);
             const json = await res.json();
             if (json.status === "success" && json.data) {
               const raw = json.data;
@@ -99,7 +99,7 @@ export default function ComparePage() {
   const fetchAllProperties = async () => {
     setLoadingAll(true);
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/properties/");
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/api/properties/`);
       const json = await res.json();
       if (json.status === "success") {
         setAllProperties(json.data || []);

@@ -44,7 +44,8 @@ export function AgentProgress({ location, bhk, onComplete }: AgentProgressProps)
 
   const connectWs = useCallback(() => {
     const clientId = Math.random().toString(36).substring(7);
-    const ws = new WebSocket(`ws://127.0.0.1:8000/api/ws/scrape-progress/${clientId}`);
+    const wsBaseUrl = (process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000").replace(/^http/, "ws");
+    const ws = new WebSocket(`${wsBaseUrl}/api/ws/scrape-progress/${clientId}`);
     wsRef.current = ws;
 
     ws.onopen = () => {

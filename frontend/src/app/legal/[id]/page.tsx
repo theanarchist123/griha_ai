@@ -53,7 +53,7 @@ export default function LegalReportPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`http://localhost:8000/api/legal/report/${propertyId}`);
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/api/legal/report/${propertyId}`);
       const json = await res.json();
       if (json.status === "success" && json.data) {
         setReport(json.data);
