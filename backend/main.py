@@ -38,6 +38,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/")
+async def root():
+    """Root endpoint to prevent 404 when visiting the backend URL directly."""
+    return {"message": "Griha AI Backend API is running. Visit /docs for the API documentation."}
+
 @app.get("/health")
 async def health_check():
     """Render and generic health check endpoint."""
