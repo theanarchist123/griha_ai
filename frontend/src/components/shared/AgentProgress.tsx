@@ -31,8 +31,6 @@ export function AgentProgress({ location, bhk, onComplete }: AgentProgressProps)
   const [isComplete, setIsComplete] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
 
-  const [retryCount, setRetryCount] = useState(0);
-
   const logsEndRef = useRef<HTMLDivElement | null>(null);
   // Refs to avoid stale closures in WS callbacks
   const isCompleteRef = useRef(false);
