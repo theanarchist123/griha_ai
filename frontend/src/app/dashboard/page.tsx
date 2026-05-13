@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { DashboardSidebar, DashboardTopBar, type DashboardSearchFilters } from "@/components/shared/Navbar";
 import { PropertyCard } from "@/components/shared/PropertyCard";
 import { SkeletonCard } from "@/components/shared/LoadingState";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { formatPrice } from "@/lib/utils";
 import type { Property } from "@/lib/mockData";
@@ -139,6 +139,10 @@ export default function DashboardPage() {
   const [scrapeProgress, setScrapeProgress] = useState(0);
   const [scrapeStatus, setScrapeStatus] = useState("");
   const [scrapeFound, setScrapeFound] = useState(0);
+  // Separate refresh counter — incrementing this re-fetches WITHOUT auto-triggering scraping
+  const [refreshCount, setRefreshCount] = useState(0);
+  // Track whether we've already auto-triggered scraping for the current location
+  const scrapeTriggeredRef = useRef<string>("");
 
   const initialFilters = useMemo<DashboardSearchFilters>(() => {
     return {
@@ -233,45 +237,55 @@ export default function DashboardPage() {
     setScrapeFound(0);
     setLoading(false);
 
-    const clientId = Math.random().toString(36).substring(7);
-    const wsBaseUrl = (process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000").replace(/^http/, "ws");
-    const ws = new WebSocket(`${wsBaseUrl}/api/ws/scrape-progress/${clientId}`);
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    let pollInterval: ReturnType<typeof setInterval> | null = null;
 
-    ws.onopen = () => {
-      setScrapeStatus("🔍 Connected! Starting live property search...");
-      ws.send(JSON.stringify({ action: "start_scraping", location, bhk }));
-    };
+    // 1. Start the scrape job via HTTP POST
+    fetch(`${apiBase}/api/scrape/start`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ location, bhk }),
+    })
+      .then((r) => r.json())
+      .then(({ job_id }) => {
+        if (!job_id) throw new Error("No job_id returned");
+        setScrapeStatus("🔍 Scraper started! Fetching live listings...");
 
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.progress !== undefined) setScrapeProgress(data.progress);
-        if (data.status) setScrapeStatus(data.status);
-        if (data.found_count !== undefined) setScrapeFound(data.found_count);
-        if (data.progress >= 100) {
-          setTimeout(() => {
-            setScraping(false);
-            setScrapeProgress(0);
-            setFilters((prev) => ({ ...prev, _refresh: Date.now() } as any));
-          }, 1500);
-        }
-      } catch { /* ignore */ }
-    };
+        // 2. Poll status every 2 s
+        pollInterval = setInterval(async () => {
+          try {
+            const res = await fetch(`${apiBase}/api/scrape/status/${job_id}`);
+            if (!res.ok) return;
+            const data = await res.json();
 
-    ws.onerror = () => {
-      setScrapeStatus("❌ Connection error. Make sure the backend is running on port 8000.");
-      setTimeout(() => setScraping(false), 4000);
-    };
+            if (data.progress !== undefined) setScrapeProgress(data.progress);
+            if (data.status) setScrapeStatus(data.status);
+            if (data.found_count !== undefined) setScrapeFound(data.found_count);
 
-    ws.onclose = () => {
-      setScraping((current) => {
-        if (current) {
-          setScrapeStatus("Connection closed.");
-          setTimeout(() => setScraping(false), 2000);
-        }
-        return current;
+            if (data.done || data.progress >= 100) {
+              if (pollInterval) clearInterval(pollInterval);
+              setTimeout(() => {
+                setScraping(false);
+                setScrapeProgress(0);
+                // Refresh listings WITHOUT resetting scrapeTriggeredRef (avoids re-trigger)
+                setRefreshCount((c) => c + 1);
+              }, 1500);
+            }
+
+            if (data.error) {
+              setScrapeStatus(`❌ ${data.error}`);
+              if (pollInterval) clearInterval(pollInterval);
+              setTimeout(() => setScraping(false), 4000);
+            }
+          } catch {
+            // transient network error — keep polling
+          }
+        }, 2000);
+      })
+      .catch(() => {
+        setScrapeStatus("❌ Could not reach the backend. Is it running?");
+        setTimeout(() => setScraping(false), 4000);
       });
-    };
   };
 
   const handleStartScrape = () => {
@@ -338,10 +352,16 @@ export default function DashboardPage() {
         setRecentActivity([]);
 
         // ============================================================
-        // AUTO-TRIGGER SCRAPING when location is set but 0 DB results
+        // AUTO-TRIGGER SCRAPING — only once per unique location+bhk combo
         // ============================================================
-        if (apiProperties.length === 0 && filters.location && !isCancelled) {
-          // Start live scraping automatically
+        const scrapeKey = `${filters.location}|${filters.bhk || "Any BHK"}`;
+        if (
+          apiProperties.length === 0 &&
+          filters.location &&
+          !isCancelled &&
+          scrapeTriggeredRef.current !== scrapeKey
+        ) {
+          scrapeTriggeredRef.current = scrapeKey;
           startScraping(filters.location, filters.bhk || "Any BHK");
         }
 
@@ -375,9 +395,11 @@ export default function DashboardPage() {
         clearTimeout(finishTimer);
       }
     };
-  }, [filters]);
+  }, [filters, refreshCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleApplyFilters = (nextFilters: DashboardSearchFilters) => {
+    // Reset the scrape guard when the user actively changes the location/BHK
+    scrapeTriggeredRef.current = "";
     setFilters(nextFilters);
 
     const params = new URLSearchParams();

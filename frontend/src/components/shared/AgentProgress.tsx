@@ -31,7 +31,8 @@ export function AgentProgress({ location, bhk, onComplete }: AgentProgressProps)
   const [isComplete, setIsComplete] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
 
-  const wsRef = useRef<WebSocket | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+
   const logsEndRef = useRef<HTMLDivElement | null>(null);
   // Refs to avoid stale closures in WS callbacks
   const isCompleteRef = useRef(false);
@@ -42,79 +43,80 @@ export function AgentProgress({ location, bhk, onComplete }: AgentProgressProps)
     logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [logs]);
 
-  const connectWs = useCallback(() => {
-    const clientId = Math.random().toString(36).substring(7);
-    const wsBaseUrl = (process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000").replace(/^http/, "ws");
-    const ws = new WebSocket(`${wsBaseUrl}/api/ws/scrape-progress/${clientId}`);
-    wsRef.current = ws;
+  const startPolling = useCallback(() => {
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    let pollInterval: ReturnType<typeof setInterval> | null = null;
+    let isMounted = true;
 
-    ws.onopen = () => {
-      setError(null);
-      setStatus("Connected! Starting live search...");
-      setLogs((prev) => [...prev, "WebSocket connected"]);
-      ws.send(JSON.stringify({ action: "start_scraping", location, bhk }));
+    setError(null);
+    setStatus("Connecting to Griha AI Agent...");
+    setLogs((prev) => [...prev, "Starting search task"]);
+
+    fetch(`${apiBase}/api/scrape/start`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ location, bhk }),
+    })
+      .then((r) => r.json())
+      .then(({ job_id }) => {
+        if (!job_id) throw new Error("No job_id returned");
+        if (!isMounted) return;
+
+        setStatus("Connected! Starting live search...");
+
+        pollInterval = setInterval(async () => {
+          try {
+            const res = await fetch(`${apiBase}/api/scrape/status/${job_id}`);
+            if (!res.ok) return;
+            const data = await res.json();
+
+            if (data.progress !== undefined) {
+              setProgress(data.progress);
+              progressRef.current = data.progress;
+            }
+            if (data.status) {
+              setStatus(data.status);
+              setLogs((prev) => [...prev, data.status]);
+            }
+            if (data.found_count !== undefined) {
+              setFoundCount(data.found_count);
+            }
+
+            if (data.done || data.progress >= 100) {
+              if (pollInterval) clearInterval(pollInterval);
+              isCompleteRef.current = true;
+              setIsComplete(true);
+              setTimeout(() => {
+                if (isMounted) onComplete?.();
+              }, 2500);
+            }
+
+            if (data.error) {
+              if (pollInterval) clearInterval(pollInterval);
+              setError(data.error);
+              setLogs((prev) => [...prev, "⚠️ Error occurred"]);
+            }
+          } catch {
+            // keep polling on transient errors
+          }
+        }, 2000);
+      })
+      .catch((err) => {
+        if (!isMounted) return;
+        setError("Connection error. The backend may not be running.");
+        setLogs((prev) => [...prev, "⚠️ Connection failed"]);
+      });
+
+    return () => {
+      isMounted = false;
+      if (pollInterval) clearInterval(pollInterval);
     };
-
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.progress !== undefined) {
-          setProgress(data.progress);
-          progressRef.current = data.progress;
-        }
-        if (data.status) {
-          setStatus(data.status);
-          setLogs((prev) => [...prev, data.status]);
-        }
-        if (data.found_count !== undefined) {
-          setFoundCount(data.found_count);
-        }
-
-        if (data.progress >= 100) {
-          isCompleteRef.current = true;
-          setIsComplete(true);
-          setTimeout(() => {
-            onComplete?.();
-          }, 2500);
-        }
-      } catch {
-        // ignore parse errors
-      }
-    };
-
-    ws.onerror = () => {
-      setError("Connection error. The backend may not be running.");
-      setLogs((prev) => [...prev, "⚠️ WebSocket error"]);
-    };
-
-    ws.onclose = () => {
-      // Use refs — avoids stale closure over state values
-      if (!isCompleteRef.current && progressRef.current < 100) {
-        setError("Connection lost. Click retry to reconnect.");
-        setLogs((prev) => [...prev, "⚠️ WebSocket disconnected"]);
-      }
-    };
-
-    return ws;
   }, [location, bhk, onComplete]);
 
   useEffect(() => {
-    const ws = connectWs();
-
-    return () => {
-      // Only close if actually open — closing a CONNECTING socket throws
-      // the "WebSocket closed before connection established" error
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.close();
-      } else {
-        // For CONNECTING state: mark it so onopen won't send and onclose is a no-op
-        ws.onopen = null;
-        ws.onclose = null;
-        ws.onerror = null;
-        ws.onmessage = null;
-      }
-    };
-  }, [retryCount]); // eslint-disable-line react-hooks/exhaustive-deps
+    const cleanup = startPolling();
+    return cleanup;
+  }, [retryCount, startPolling]);
 
   const handleRetry = () => {
     isCompleteRef.current = false;
