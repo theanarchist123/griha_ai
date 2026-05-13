@@ -1,12 +1,12 @@
 from fastapi import APIRouter
-from . import locations, search, auth, properties, ws, negotiation, documents, legal, neighbourhood, neighbourhood_ai, preferences, activity
+from . import locations, search, auth, properties, scrape, negotiation, documents, legal, neighbourhood, neighbourhood_ai, preferences, activity
 
 router = APIRouter()
 router.include_router(locations.router)
 router.include_router(search.router)
 router.include_router(auth.router)
 router.include_router(properties.router)
-router.include_router(ws.router)
+router.include_router(scrape.router)
 router.include_router(negotiation.router)
 router.include_router(documents.router)
 router.include_router(legal.router)
