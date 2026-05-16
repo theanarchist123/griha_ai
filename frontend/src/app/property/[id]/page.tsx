@@ -215,7 +215,7 @@ export default function PropertyDetailPage() {
       setError(null);
 
       try {
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/api/properties/${propertyId}`);
+        const res = await fetch(`${(process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "")}/api/properties/${propertyId}`);
         const json = await res.json();
         if (!res.ok || json?.status !== "success" || !json?.data) {
           throw new Error(json?.detail || "Failed to fetch property details.");

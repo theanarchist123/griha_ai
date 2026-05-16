@@ -237,7 +237,7 @@ export default function DashboardPage() {
     setScrapeFound(0);
     setLoading(false);
 
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    const apiBase = (process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
     let pollInterval: ReturnType<typeof setInterval> | null = null;
 
     // 1. Start the scrape job via HTTP POST
@@ -314,8 +314,8 @@ export default function DashboardPage() {
         if (filters.parking) params.set("parking", "true");
 
         const searchUrl = params.toString()
-          ? `${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/api/properties/search?${params.toString()}`
-          : `${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/api/properties/search`;
+          ? `${(process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "")}/api/properties/search?${params.toString()}`
+          : `${(process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "")}/api/properties/search`;
 
         const searchRes = await fetch(searchUrl);
         const searchJson = await searchRes.json();
@@ -342,7 +342,7 @@ export default function DashboardPage() {
 
         // Only fallback when there are no active filters
         if (apiProperties.length === 0 && !hasActiveFilters) {
-          const allRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/api/properties/`);
+          const allRes = await fetch(`${(process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "")}/api/properties/`);
           const allJson = await allRes.json();
           apiProperties = Array.isArray(allJson.data) ? allJson.data : [];
         }

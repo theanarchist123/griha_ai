@@ -47,7 +47,7 @@ export default function NeighbourhoodSelectorPage() {
   const [geocoding, setGeocoding] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/api/properties/search`)
+    fetch(`${(process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "")}/api/properties/search`)
       .then((r) => r.json())
       .then((d) => {
         const items = Array.isArray(d.results) ? d.results : Array.isArray(d.data) ? d.data : [];

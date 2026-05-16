@@ -42,7 +42,7 @@ export function AgentProgress({ location, bhk, onComplete }: AgentProgressProps)
   }, [logs]);
 
   const startPolling = useCallback(() => {
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    const apiBase = (process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
     let pollInterval: ReturnType<typeof setInterval> | null = null;
     let isMounted = true;
 

@@ -163,7 +163,7 @@ export function DashboardTopBar({ filters, onApplyFilters }: DashboardTopBarProp
       try {
         setLoadingSuggestions(true);
         const res = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/api/locations/autocomplete?q=${encodeURIComponent(draftFilters.location.trim())}`,
+          `${(process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "")}/api/locations/autocomplete?q=${encodeURIComponent(draftFilters.location.trim())}`,
           { signal: controller.signal }
         );
 
@@ -215,7 +215,7 @@ export function DashboardTopBar({ filters, onApplyFilters }: DashboardTopBarProp
             lon: String(position.coords.longitude),
           });
 
-          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/api/locations/reverse?${params.toString()}`);
+          const response = await fetch(`${(process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "")}/api/locations/reverse?${params.toString()}`);
           if (!response.ok) {
             throw new Error("reverse_geocode_failed");
           }

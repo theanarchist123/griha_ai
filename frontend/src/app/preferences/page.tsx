@@ -48,7 +48,7 @@ export default function PreferencesPage() {
     }
     setLoading(true);
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/api/preferences/${userId}`);
+      const res = await fetch(`${(process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "")}/api/preferences/${userId}`);
       const json = await res.json();
       if (json.status === "success" && json.data) {
         setPrefs(json.data);
@@ -73,7 +73,7 @@ export default function PreferencesPage() {
     setSaving(true);
     setErrorMsg(null);
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/api/preferences/${userId}`, {
+      const res = await fetch(`${(process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "")}/api/preferences/${userId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates),
