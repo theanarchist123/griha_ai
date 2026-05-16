@@ -104,7 +104,41 @@ class ScraperAgent:
     # HTTP helpers
     # ------------------------------------------------------------------
 
-    async def _fetch_page(self, url: str, timeout: float = 12.0) -> Optional[str]:
+    async def _scrape_safe(self, target_url: str, timeout: float = 20.0) -> Optional[str]:
+        """Wrapper for fetch that uses ScraperAPI to bypass bot protection."""
+        api_key = os.getenv("SCRAPER_API_KEY")
+        if not api_key:
+            print("  [scraper_api] WARNING: SCRAPER_API_KEY not found in env.")
+            # Fallback to direct fetch if no key
+            return await self._direct_fetch(target_url, timeout)
+
+        scraper_url = "https://api.scraperapi.com/"
+        params = {
+            "api_key": api_key,
+            "url": target_url,
+            "render": "true",
+            "premium": "true",
+            "country_code": "in",
+        }
+
+        for attempt in range(3):
+            try:
+                async with httpx.AsyncClient(timeout=timeout) as client:
+                    response = await client.get(scraper_url, params=params)
+                    print(f"  [scrape_safe] {target_url[:60]} -> ScraperAPI HTTP {response.status_code}")
+                    response.raise_for_status()
+                    return response.text
+            except Exception as exc:
+                print(f"  [scrape_safe] {target_url[:60]} -> ERROR (attempt {attempt+1}/3): {exc}")
+                if attempt < 2:
+                    await asyncio.sleep(2.0)
+                else:
+                    print(f"  [scrape_safe] Failed after 3 attempts for {target_url}")
+                    return None
+        return None
+
+    async def _direct_fetch(self, url: str, timeout: float = 12.0) -> Optional[str]:
+        """Original direct fetch without proxy."""
         headers = {
             "User-Agent": self._random_ua(),
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -129,6 +163,10 @@ class ScraperAgent:
                     continue
                 return None
         return None
+
+    async def _fetch_page(self, url: str, timeout: float = 20.0) -> Optional[str]:
+        """Wrapper for backward compatibility."""
+        return await self._scrape_safe(url, timeout)
 
     # ------------------------------------------------------------------
     # Image extraction from HTML
@@ -249,34 +287,43 @@ class ScraperAgent:
     # ------------------------------------------------------------------
 
     async def _ddg_search(self, query: str) -> list[dict]:
-        """Search DDG for property listings."""
-        url = "https://html.duckduckgo.com/html/"
-        headers = {
-            "User-Agent": self._random_ua(),
-            "Accept": "text/html,application/xhtml+xml",
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Origin": "https://html.duckduckgo.com",
-            "Referer": "https://html.duckduckgo.com/",
+        """Search DDG for property listings using SerpAPI."""
+        api_key = os.getenv("SERPAPI_KEY")
+        if not api_key:
+            print("  [serp_api] WARNING: SERPAPI_KEY not found in env.")
+            return []
+
+        url = "https://serpapi.com/search"
+        params = {
+            "engine": "duckduckgo",
+            "q": query,
+            "api_key": api_key,
         }
 
-        for attempt in range(2):
+        for attempt in range(3):
             try:
-                verify = attempt == 0
-                async with httpx.AsyncClient(
-                    timeout=12.0, follow_redirects=True, verify=verify
-                ) as client:
-                    response = await client.post(url, data={"q": query, "b": ""}, headers=headers)
+                async with httpx.AsyncClient(timeout=15.0) as client:
+                    response = await client.get(url, params=params)
                     response.raise_for_status()
-                    text = response.text
-                    if "please try again" in text.lower() or "robot" in text.lower():
-                        await asyncio.sleep(1.5)
-                        headers["User-Agent"] = self._random_ua()
-                        continue
-                    return self._parse_ddg_results(text)
-            except Exception:
-                await asyncio.sleep(0.8)
-                headers["User-Agent"] = self._random_ua()
-                continue
+                    data = response.json()
+                    
+                    results = []
+                    organic = data.get("organic_results", [])
+                    for item in organic:
+                        link = item.get("link")
+                        if link and link.startswith("http"):
+                            results.append({
+                                "title": item.get("title", ""),
+                                "url": link
+                            })
+                    print(f"  [serp_api] Found {len(results)} results for query: {query}")
+                    return results
+            except Exception as exc:
+                print(f"  [serp_api] ERROR (attempt {attempt+1}/3): {exc}")
+                if attempt < 2:
+                    await asyncio.sleep(2.0)
+                else:
+                    return []
         return []
 
     def _parse_ddg_results(self, html: str) -> list[dict]:
