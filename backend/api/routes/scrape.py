@@ -157,37 +157,31 @@ async def scrape_status(job_id: str):
 
 @router.get("/debug")
 async def debug_scrape():
-    """Diagnostic: fetch MagicBricks from Vercel and show what we get.
-    This helps debug whether Vercel's IP is blocked/captcha'd."""
+    """Diagnostic: test multiple property sites from Vercel."""
     import httpx
-    url = "https://www.magicbricks.com/3-bhk-flats-for-rent-in-malad-east-mumbai-pppfr"
-    try:
-        async with httpx.AsyncClient(
-            timeout=15.0, follow_redirects=True,
-            headers={
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/125.0.0.0 Safari/537.36",
-                "Accept": "text/html,application/xhtml+xml",
-                "Accept-Language": "en-US,en;q=0.9",
-            }
-        ) as client:
-            resp = await client.get(url)
-            text = resp.text
-            has_bhk = "BHK" in text
-            has_card = "mb-srp__card" in text
-            has_h2 = "<h2" in text
-            has_captcha = "captcha" in text.lower() or "robot" in text.lower()
-            h2_count = text.count("<h2")
-            return {
-                "status_code": resp.status_code,
-                "html_length": len(text),
-                "has_bhk_keyword": has_bhk,
-                "has_srp_cards": has_card,
-                "has_h2_tags": has_h2,
-                "h2_count": h2_count,
-                "has_captcha_keywords": has_captcha,
-                "first_500_chars": text[:500],
-                "title_snippet": text[text.find("<title"):text.find("</title>") + 8] if "<title" in text else "no-title",
-            }
-    except Exception as exc:
-        return {"error": str(exc)}
+    results = {}
+    test_urls = {
+        "magicbricks": "https://www.magicbricks.com/3-bhk-flats-for-rent-in-malad-east-mumbai-pppfr",
+        "nobroker": "https://www.nobroker.in/property/rent/mumbai/Malad+East?searchParam=W3sibGF0IjoxOS4xODU1MDIyLCJsb24iOjcyLjg2MTc2MTQsInBsYWNlSWQiOiJDaElKTjQwem0tYjk1anNSZno3M0F4N3RLOE0iLCJwbGFjZU5hbWUiOiJNYWxhZCBFYXN0In1d&orderBy=relevance&pageNo=1&bhk=3",
+        "housing_com": "https://housing.com/rent/in-malad-east-mumbai/3-bhk",
+    }
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/125.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml",
+    }
+    for name, url in test_urls.items():
+        try:
+            async with httpx.AsyncClient(timeout=15.0, follow_redirects=True, headers=headers) as client:
+                resp = await client.get(url)
+                text = resp.text
+                results[name] = {
+                    "status_code": resp.status_code,
+                    "html_length": len(text),
+                    "has_listing_keywords": any(kw in text.lower() for kw in ["bhk", "rent", "sqft", "carpet"]),
+                    "blocked": resp.status_code in (403, 429) or "access denied" in text.lower(),
+                    "first_200": text[:200],
+                }
+        except Exception as exc:
+            results[name] = {"error": str(exc)}
+    return results
 
