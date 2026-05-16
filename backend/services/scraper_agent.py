@@ -438,6 +438,7 @@ class ScraperAgent:
         def _txt(node) -> str:
             return node.get_text(" ", strip=True) if node else ""
 
+        # ── Strategy A: JS-rendered .mb-srp__card divs (works in browser) ──
         for card in cards:
             title = _txt(card.select_one(".mb-srp__card--title"))
             if not title:
@@ -507,6 +508,100 @@ class ScraperAgent:
                 "source_url": href or search_url,
                 "card_text": full_text,
             })
+
+        # ── Strategy B: SSR/SEO fallback (httpx from server IPs) ──────────
+        # MagicBricks renders cards via JavaScript. From datacenter IPs,
+        # httpx only gets server-rendered HTML where each listing appears as
+        # an <h2> heading + description paragraph with price, sqft, etc.
+        if not listings:
+            print("  [phase1] No .mb-srp__card found — trying SSR/SEO parser")
+            # Find all h2 headings that look like listing titles
+            for h2 in soup.select("h2"):
+                h2_text = _txt(h2)
+                if "BHK" not in h2_text or "Rent" not in h2_text:
+                    continue
+
+                # Collect text from the siblings until the next h2
+                desc_parts: list[str] = []
+                sibling = h2.find_next_sibling()
+                while sibling and sibling.name != "h2":
+                    desc_parts.append(_txt(sibling))
+                    sibling = sibling.find_next_sibling()
+                desc_blob = " ".join(desc_parts)
+
+                if not desc_blob or len(desc_blob) < 30:
+                    continue
+
+                # Extract price: "₹1.7 Lac", "₹70,000", "₹2.9 Lac"
+                price = self._parse_price_inr(desc_blob)
+                if not price:
+                    continue
+
+                # Extract carpet area: "carpet area of 1830 sqft" or "1830 sqft"
+                sqft_m = re.search(r"(?:carpet\s+area\s+of\s+)?(\d[\d,]*)\s*sq\s*ft", desc_blob, re.IGNORECASE)
+                size_sqft = int(sqft_m.group(1).replace(",", "")) if sqft_m else None
+
+                # Bathrooms: "5 bathrooms" or "3 bathrooms"
+                bath_m = re.search(r"(\d+)\s*bath", desc_blob, re.IGNORECASE)
+                bathrooms = int(bath_m.group(1)) if bath_m else None
+
+                # Furnishing
+                furnishing = None
+                desc_lower = desc_blob.lower()
+                if "semi" in desc_lower and "furnish" in desc_lower:
+                    furnishing = "Semi Furnished"
+                elif "unfurnish" in desc_lower:
+                    furnishing = "Unfurnished"
+                elif "fully" in desc_lower and "furnish" in desc_lower:
+                    furnishing = "Fully Furnished"
+                elif "furnished" in desc_lower:
+                    furnishing = "Furnished"
+
+                # Society name: check the link right after h2
+                society = None
+                h2_link = h2.find("a")
+                if h2_link:
+                    society = _txt(h2_link)
+
+                # View Property link
+                source_url = search_url
+                # Look for "View Property" or "propertyDetails" links
+                view_link = None
+                sib = h2.find_next_sibling()
+                while sib and sib.name != "h2":
+                    for a in (sib.select("a[href]") if hasattr(sib, "select") else []):
+                        href_val = a.get("href", "")
+                        if "propertyDetails" in href_val or "pdpid" in href_val:
+                            view_link = href_val
+                            break
+                    if view_link:
+                        break
+                    sib = sib.find_next_sibling()
+                if view_link:
+                    source_url = view_link
+
+                # Build title from h2
+                title = h2_text
+
+                apartment = society
+                if not apartment:
+                    m_apt = re.search(r"for\s+Rent\s+in\s+(.+)", title, re.IGNORECASE)
+                    if m_apt:
+                        apartment = m_apt.group(1).split(",")[0].strip()
+
+                listings.append({
+                    "title": title,
+                    "price": price,
+                    "society_name": apartment or title,
+                    "size_sqft": size_sqft,
+                    "bathrooms": bathrooms,
+                    "furnishing": furnishing,
+                    "images": [],
+                    "source_url": source_url,
+                    "card_text": desc_blob[:500],
+                })
+
+            print(f"  [phase1] SSR parser found {len(listings)} listings")
 
         return listings, search_url
 
