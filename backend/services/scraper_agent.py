@@ -399,42 +399,43 @@ class ScraperAgent:
             print("  [nobroker] No HTML returned")
             return [], search_url
 
-        # Extract __NEXT_DATA__ JSON
+        # Extract window.nb.appState JSON
         listings: list[dict] = []
         try:
-            soup = BeautifulSoup(html, "lxml")
-            next_data_tag = soup.find("script", id="__NEXT_DATA__")
-            if not next_data_tag or not next_data_tag.string:
-                print(f"  [nobroker] No __NEXT_DATA__ found in {len(html)} chars HTML")
+            # Find the script tag containing nb.appState
+            start_str = "nb.appState = "
+            start = html.find(start_str)
+            if start < 0:
+                print(f"  [nobroker] No {start_str} found in HTML")
                 return [], search_url
+            
+            start += len(start_str)
+            brace_count = 0
+            end = start
+            for i, char in enumerate(html[start:]):
+                if char == '{':
+                    brace_count += 1
+                elif char == '}':
+                    brace_count -= 1
+                    if brace_count == 0:
+                        end = start + i + 1
+                        break
+            
+            json_str = html[start:end]
+            next_data = json.loads(json_str)
 
-            next_data = json.loads(next_data_tag.string)
-
-            # Navigate to property list — structure: props.pageProps.xxxData
-            page_props = next_data.get("props", {}).get("pageProps", {})
-
-            # Try multiple possible paths
-            properties = []
-            for key in ["initialData", "serverData", "data", "searchData"]:
-                data_obj = page_props.get(key, {})
-                if isinstance(data_obj, dict):
-                    properties = data_obj.get("properties", []) or data_obj.get("data", [])
-                    if properties:
+            # Navigate to property list
+            list_page = next_data.get("listPage", {})
+            properties = list_page.get("listPageProperties", [])
+            
+            if not properties:
+                # Try fallback paths just in case
+                for key in ["data", "properties", "searchData"]:
+                    if isinstance(list_page.get(key), list):
+                        properties = list_page[key]
                         break
 
-            # Also try direct pageProps.properties
-            if not properties:
-                properties = page_props.get("properties", [])
-
-            # Also try otherParams.resultList or similar
-            if not properties:
-                for key, val in page_props.items():
-                    if isinstance(val, list) and len(val) > 0 and isinstance(val[0], dict):
-                        if "rent" in val[0] or "propertyTitle" in val[0] or "price" in val[0]:
-                            properties = val
-                            break
-
-            print(f"  [nobroker] Found {len(properties)} properties in __NEXT_DATA__")
+            print(f"  [nobroker] Found {len(properties)} properties in appState")
 
             for prop in properties:
                 if not isinstance(prop, dict):
@@ -492,6 +493,8 @@ class ScraperAgent:
                 })
 
         except Exception as exc:
+            import traceback
+            traceback.print_exc()
             print(f"  [nobroker] Parse error: {exc}")
 
         print(f"  [nobroker] Returning {len(listings)} listings")
