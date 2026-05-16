@@ -176,12 +176,24 @@ async def debug_scrape():
             async with httpx.AsyncClient(timeout=15.0, follow_redirects=True, headers=headers) as client:
                 resp = await client.get(url)
                 text = resp.text
+                
+                # if NoBroker, look for scripts
+                scripts_info = []
+                if name == "nobroker":
+                    import re
+                    from bs4 import BeautifulSoup
+                    soup = BeautifulSoup(text, "lxml")
+                    for script in soup.find_all("script"):
+                        s_text = script.string or ""
+                        if "nb.appState" in s_text or "rent" in s_text.lower():
+                            scripts_info.append(s_text[:200])
+
                 results[name] = {
                     "status_code": resp.status_code,
                     "html_length": len(text),
                     "has_listing_keywords": any(kw in text.lower() for kw in ["bhk", "rent", "sqft", "carpet"]),
                     "blocked": resp.status_code in (403, 429) or "access denied" in text.lower(),
-                    "first_200": text[:200],
+                    "scripts_found": scripts_info,
                 }
         except Exception as exc:
             results[name] = {"error": str(exc)}
