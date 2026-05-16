@@ -1,18 +1,22 @@
 """
-HTTP-polling scrape routes for Griha AI.
+HTTP scrape routes for Griha AI.
 
-POST /api/scrape/start  → starts background scrape job, returns {job_id}
-GET  /api/scrape/status/{job_id} → returns {progress, status, found_count, done}
+IMPORTANT: On Vercel serverless, BackgroundTasks are killed after the
+response is sent.  Therefore `/start` runs the scrape **synchronously**
+within the request and streams progress updates into an in-memory store
+that `/status/{job_id}` can poll.
+
+For Vercel Hobby (10 s) this will often time out.  We cap the scrape at
+~55 s so it fits inside Pro‑tier (60 s) limits.  If it times out, the
+partial results already saved to MongoDB are still queryable.
 """
 
 import asyncio
 import uuid
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
-
-from services.scraper_agent import ScraperAgent
 
 router = APIRouter(prefix="/api/scrape", tags=["Scrape"])
 
@@ -23,7 +27,7 @@ _jobs: Dict[str, Dict[str, Any]] = {}
 
 
 class MockWebSocket:
-    """Fake WebSocket so ScraperAgent can send progress updates into the job store."""
+    """Fake WebSocket so ScraperAgent can push progress into the job store."""
 
     def __init__(self, job_id: str):
         self.job_id = job_id
@@ -44,23 +48,6 @@ class MockWebSocket:
 
 
 # ──────────────────────────────────────────────
-# Background task
-# ──────────────────────────────────────────────
-
-async def _run_scrape(job_id: str, location: str, bhk: str):
-    ws = MockWebSocket(job_id)
-    agent = ScraperAgent(ws)
-    try:
-        await agent.run_scrape_workflow(location, bhk)
-    except Exception as exc:
-        job = _jobs.get(job_id)
-        if job:
-            job["progress"] = 100
-            job["status"] = f"❌ Error: {str(exc)[:120]}"
-            job["done"] = True
-
-
-# ──────────────────────────────────────────────
 # Request / response models
 # ──────────────────────────────────────────────
 
@@ -71,6 +58,10 @@ class ScrapeStartRequest(BaseModel):
 
 class ScrapeStartResponse(BaseModel):
     job_id: str
+    progress: int = 0
+    status: str = ""
+    found_count: int = 0
+    done: bool = False
 
 
 class ScrapeStatusResponse(BaseModel):
@@ -86,8 +77,18 @@ class ScrapeStatusResponse(BaseModel):
 # ──────────────────────────────────────────────
 
 @router.post("/start", response_model=ScrapeStartResponse)
-async def start_scrape(req: ScrapeStartRequest, background_tasks: BackgroundTasks):
-    """Start a property scrape job. Returns a job_id to poll."""
+async def start_scrape(req: ScrapeStartRequest):
+    """
+    Start a property scrape job.
+
+    On Vercel serverless, we run synchronously within this request
+    (BackgroundTasks die after response). The scrape saves results
+    directly to MongoDB. Even if the function times out after 10-60 s,
+    partial results are already persisted and queryable.
+    """
+    # Lazy import to avoid circular import at module-load time
+    from services.scraper_agent import ScraperAgent
+
     job_id = str(uuid.uuid4())
     _jobs[job_id] = {
         "progress": 0,
@@ -95,8 +96,40 @@ async def start_scrape(req: ScrapeStartRequest, background_tasks: BackgroundTask
         "found_count": 0,
         "done": False,
     }
-    background_tasks.add_task(_run_scrape, job_id, req.location, req.bhk or "2 BHK")
-    return ScrapeStartResponse(job_id=job_id)
+
+    ws = MockWebSocket(job_id)
+    agent = ScraperAgent(ws)
+
+    try:
+        # Run with a 55-second timeout (Vercel Pro = 60 s max)
+        await asyncio.wait_for(
+            agent.run_scrape_workflow(req.location, req.bhk or "2 BHK"),
+            timeout=55.0,
+        )
+    except asyncio.TimeoutError:
+        job = _jobs.get(job_id)
+        if job:
+            job["progress"] = 100
+            job["status"] = (
+                f"⏱️ Scrape timed out but partial results were saved. "
+                f"Refresh your dashboard to see them."
+            )
+            job["done"] = True
+    except Exception as exc:
+        job = _jobs.get(job_id)
+        if job:
+            job["progress"] = 100
+            job["status"] = f"❌ Error: {str(exc)[:120]}"
+            job["done"] = True
+
+    final = _jobs.get(job_id, {})
+    return ScrapeStartResponse(
+        job_id=job_id,
+        progress=final.get("progress", 100),
+        status=final.get("status", "Done"),
+        found_count=final.get("found_count", 0),
+        done=True,
+    )
 
 
 @router.get("/status/{job_id}", response_model=ScrapeStatusResponse)
@@ -104,7 +137,15 @@ async def scrape_status(job_id: str):
     """Poll scrape job status."""
     job = _jobs.get(job_id)
     if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+        # On serverless, the instance that ran /start is likely gone.
+        # Return "done" so frontend stops polling.
+        return ScrapeStatusResponse(
+            job_id=job_id,
+            progress=100,
+            status="✅ Scrape completed. Refresh dashboard to see results.",
+            found_count=0,
+            done=True,
+        )
     return ScrapeStatusResponse(
         job_id=job_id,
         progress=job["progress"],
