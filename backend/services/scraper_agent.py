@@ -546,6 +546,7 @@ class ScraperAgent:
             return re.sub(r"[^a-z0-9]+", " ", (s or "").lower()).strip()
 
         loc_norm = _norm(locality)
+        loc_words = [w for w in loc_norm.split() if len(w) > 2]
         bhk_token = f"{bhk_num} bhk"
         filtered = []
         for item in mb_listings:
@@ -555,7 +556,7 @@ class ScraperAgent:
             )
             if bhk_token not in blob:
                 continue
-            if loc_norm and loc_norm not in blob:
+            if loc_words and not any(w in blob for w in loc_words):
                 continue
             filtered.append(item)
         print(
