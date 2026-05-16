@@ -153,3 +153,41 @@ async def scrape_status(job_id: str):
         found_count=job["found_count"],
         done=job["done"],
     )
+
+
+@router.get("/debug")
+async def debug_scrape():
+    """Diagnostic: fetch MagicBricks from Vercel and show what we get.
+    This helps debug whether Vercel's IP is blocked/captcha'd."""
+    import httpx
+    url = "https://www.magicbricks.com/3-bhk-flats-for-rent-in-malad-east-mumbai-pppfr"
+    try:
+        async with httpx.AsyncClient(
+            timeout=15.0, follow_redirects=True,
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/125.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml",
+                "Accept-Language": "en-US,en;q=0.9",
+            }
+        ) as client:
+            resp = await client.get(url)
+            text = resp.text
+            has_bhk = "BHK" in text
+            has_card = "mb-srp__card" in text
+            has_h2 = "<h2" in text
+            has_captcha = "captcha" in text.lower() or "robot" in text.lower()
+            h2_count = text.count("<h2")
+            return {
+                "status_code": resp.status_code,
+                "html_length": len(text),
+                "has_bhk_keyword": has_bhk,
+                "has_srp_cards": has_card,
+                "has_h2_tags": has_h2,
+                "h2_count": h2_count,
+                "has_captcha_keywords": has_captcha,
+                "first_500_chars": text[:500],
+                "title_snippet": text[text.find("<title"):text.find("</title>") + 8] if "<title" in text else "no-title",
+            }
+    except Exception as exc:
+        return {"error": str(exc)}
+

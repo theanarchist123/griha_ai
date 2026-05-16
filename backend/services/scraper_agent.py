@@ -119,9 +119,11 @@ class ScraperAgent:
                     timeout=timeout, follow_redirects=True, headers=headers, verify=verify
                 ) as client:
                     response = await client.get(url)
+                    print(f"  [fetch] {url[:80]} -> HTTP {response.status_code}, {len(response.text)} chars")
                     response.raise_for_status()
                     return response.text
-            except Exception:
+            except Exception as exc:
+                print(f"  [fetch] {url[:80]} -> ERROR: {exc}")
                 if attempt == 0:
                     await asyncio.sleep(0.5)
                     continue
@@ -404,14 +406,25 @@ class ScraperAgent:
 
         html = None
         search_url = candidate_urls[0]
-        for url in candidate_urls:
+        print(f"  [phase1] Trying {len(candidate_urls)} candidate URLs...")
+        for i, url in enumerate(candidate_urls):
             fetched = await self._fetch_page(url, timeout=20.0)
-            if not fetched or len(fetched) < 5000:
+            if not fetched:
+                print(f"  [phase1] URL#{i+1}: no response")
+                continue
+            if len(fetched) < 5000:
+                print(f"  [phase1] URL#{i+1}: too short ({len(fetched)} chars) — likely blocked/captcha")
                 continue
             # Quick check: does this page mention the locality at all?
             soup_check = BeautifulSoup(fetched, "lxml")
             page_text_norm = _norm(soup_check.get_text(" ", strip=True)[:8000])
-            if loc_norm and loc_norm not in page_text_norm:
+            has_locality = loc_norm in page_text_norm if loc_norm else True
+            print(f"  [phase1] URL#{i+1}: {len(fetched)} chars, locality_match={has_locality}")
+            if not has_locality:
+                # Still keep it as a fallback candidate
+                if not html:
+                    html = fetched
+                    search_url = url
                 continue
             html = fetched
             search_url = url
@@ -419,8 +432,8 @@ class ScraperAgent:
 
         if not html:
             # Last resort: use whatever came back from the first URL even if locality
-            # wasn't detected in the preview text (avoids empty result when MB's
-            # page text is JS-rendered and only partially visible).
+            # wasn't detected in the preview text.
+            print("  [phase1] No locality-matched HTML — trying last resort fetch")
             for url in candidate_urls:
                 fetched = await self._fetch_page(url, timeout=20.0)
                 if fetched and len(fetched) >= 5000:
@@ -429,7 +442,10 @@ class ScraperAgent:
                     break
 
         if not html:
+            print("  [phase1] No HTML at all — all URLs failed or blocked")
             return [], search_url
+
+        print(f"  [phase1] Using HTML from {search_url[:80]} ({len(html)} chars)")
 
         soup = BeautifulSoup(html, "lxml")
         cards = soup.select(".mb-srp__card")
