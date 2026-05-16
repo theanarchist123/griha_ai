@@ -116,10 +116,12 @@ async def start_scrape(req: ScrapeStartRequest):
             )
             job["done"] = True
     except Exception as exc:
+        import traceback
+        traceback.print_exc()
         job = _jobs.get(job_id)
         if job:
             job["progress"] = 100
-            job["status"] = f"❌ Error: {str(exc)[:120]}"
+            job["status"] = f"❌ Error: {repr(exc)}"
             job["done"] = True
 
     final = _jobs.get(job_id, {})

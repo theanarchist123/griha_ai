@@ -351,8 +351,176 @@ class ScraperAgent:
         return int(m.group(0)) if m else None
 
     # ------------------------------------------------------------------
+    # NoBroker scraper (PRIMARY — not blocked from Vercel IPs)
+    # ------------------------------------------------------------------
+
+    async def _scrape_nobroker(
+        self, locality: str, city: str, bhk_num: int
+    ) -> tuple[list[dict], str]:
+        """Scrape NoBroker search results via their Next.js SSR data.
+
+        NoBroker embeds listing data in <script id="__NEXT_DATA__"> which
+        is available from server-rendered HTML without JS execution.
+        Unlike MagicBricks, NoBroker does NOT block datacenter IPs.
+        """
+        import base64
+
+        # Build the searchParam (base64-encoded JSON with lat/lon)
+        # First, geocode the locality to get lat/lon
+        lat, lon = await self._geocode_locality(locality, city)
+        if not lat:
+            print(f"  [nobroker] Could not geocode {locality}, {city}")
+            return [], ""
+
+        search_data = json.dumps([{
+            "lat": lat,
+            "lon": lon,
+            "placeId": "",
+            "placeName": locality,
+            "showMap": False,
+        }])
+        search_param = base64.b64encode(search_data.encode()).decode()
+
+        loc_slug = locality.replace(" ", "+")
+        city_lower = city.lower().strip()
+
+        search_url = (
+            f"https://www.nobroker.in/property/rent/{city_lower}/{loc_slug}"
+            f"?searchParam={search_param}"
+            f"&bhk={bhk_num}"
+            f"&type=BHK{bhk_num}"
+            f"&locality={quote(locality)}"
+            f"&orderBy=relevance&pageNo=1"
+        )
+
+        print(f"  [nobroker] Fetching: {search_url[:100]}...")
+        html = await self._fetch_page(search_url, timeout=20.0)
+        if not html:
+            print("  [nobroker] No HTML returned")
+            return [], search_url
+
+        # Extract __NEXT_DATA__ JSON
+        listings: list[dict] = []
+        try:
+            soup = BeautifulSoup(html, "lxml")
+            next_data_tag = soup.find("script", id="__NEXT_DATA__")
+            if not next_data_tag or not next_data_tag.string:
+                print(f"  [nobroker] No __NEXT_DATA__ found in {len(html)} chars HTML")
+                return [], search_url
+
+            next_data = json.loads(next_data_tag.string)
+
+            # Navigate to property list — structure: props.pageProps.xxxData
+            page_props = next_data.get("props", {}).get("pageProps", {})
+
+            # Try multiple possible paths
+            properties = []
+            for key in ["initialData", "serverData", "data", "searchData"]:
+                data_obj = page_props.get(key, {})
+                if isinstance(data_obj, dict):
+                    properties = data_obj.get("properties", []) or data_obj.get("data", [])
+                    if properties:
+                        break
+
+            # Also try direct pageProps.properties
+            if not properties:
+                properties = page_props.get("properties", [])
+
+            # Also try otherParams.resultList or similar
+            if not properties:
+                for key, val in page_props.items():
+                    if isinstance(val, list) and len(val) > 0 and isinstance(val[0], dict):
+                        if "rent" in val[0] or "propertyTitle" in val[0] or "price" in val[0]:
+                            properties = val
+                            break
+
+            print(f"  [nobroker] Found {len(properties)} properties in __NEXT_DATA__")
+
+            for prop in properties:
+                if not isinstance(prop, dict):
+                    continue
+
+                title = prop.get("propertyTitle") or prop.get("title") or ""
+                rent = prop.get("rent") or prop.get("price") or prop.get("expectedRent")
+                if isinstance(rent, str):
+                    rent = self._parse_price_inr(rent)
+                if not rent or rent < 1000:
+                    continue
+
+                prop_id = prop.get("propertyId") or prop.get("id") or ""
+                society = prop.get("society") or prop.get("buildingName") or prop.get("projectName") or ""
+                locality_name = prop.get("locality") or prop.get("localityName") or locality
+
+                carpet = prop.get("carpetArea") or prop.get("builtUpArea") or prop.get("area")
+                if isinstance(carpet, str):
+                    carpet = self._parse_int(carpet)
+
+                bathrooms = prop.get("bathroom") or prop.get("bathrooms")
+                if isinstance(bathrooms, str):
+                    bathrooms = self._parse_int(bathrooms)
+
+                furnishing = prop.get("furnishingDesc") or prop.get("furnishing") or None
+
+                # Images
+                images = []
+                photo_list = prop.get("photos") or prop.get("images") or []
+                if isinstance(photo_list, list):
+                    for photo in photo_list[:3]:
+                        if isinstance(photo, str) and photo.startswith("http"):
+                            images.append(photo)
+                        elif isinstance(photo, dict):
+                            url = photo.get("url") or photo.get("imagesMap", {}).get("original") or ""
+                            if url.startswith("http"):
+                                images.append(url)
+
+                # Build detail URL
+                source_url = f"https://www.nobroker.in/properties/{prop_id}" if prop_id else search_url
+
+                if not title:
+                    title = f"{bhk_num} BHK in {society or locality_name}"
+
+                listings.append({
+                    "title": title,
+                    "price": float(rent),
+                    "society_name": society or title,
+                    "size_sqft": int(carpet) if carpet else None,
+                    "bathrooms": int(bathrooms) if bathrooms else None,
+                    "furnishing": furnishing,
+                    "images": images,
+                    "source_url": source_url,
+                    "card_text": f"{title} | ₹{rent} | {carpet or '?'} sqft | {locality_name}",
+                })
+
+        except Exception as exc:
+            print(f"  [nobroker] Parse error: {exc}")
+
+        print(f"  [nobroker] Returning {len(listings)} listings")
+        return listings, search_url
+
+    async def _geocode_locality(self, locality: str, city: str) -> tuple[Optional[float], Optional[float]]:
+        """Use Nominatim to get lat/lon for a locality."""
+        query = f"{locality}, {city}, India"
+        url = (
+            f"https://nominatim.openstreetmap.org/search"
+            f"?q={quote(query)}&format=jsonv2&limit=1&countrycodes=in"
+        )
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(url, headers={
+                    "User-Agent": "GrihaAI/1.0 (property search app)",
+                })
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if data:
+                        return float(data[0]["lat"]), float(data[0]["lon"])
+        except Exception as exc:
+            print(f"  [geocode] Error: {exc}")
+        return None, None
+
+    # ------------------------------------------------------------------
     # MagicBricks SRP scraper
     # ------------------------------------------------------------------
+
 
     async def _scrape_magicbricks(
         self, locality: str, city: str, bhk_num: int
@@ -633,23 +801,45 @@ class ScraperAgent:
         saved_properties: list[Property] = []
 
         # ================================================================
-        # PHASE 1: Live scrape MagicBricks (PRIMARY — real listings)
+        # PHASE 1: Live scrape NoBroker (PRIMARY — real listings)
         # ================================================================
         await self.send_update(
             10,
-            f"🔍 Searching MagicBricks for {fallback_bhk} in {locality}, {city}...",
+            f"🔍 Searching NoBroker for {fallback_bhk} in {locality}, {city}...",
             0,
         )
 
-        print(f"\n  [phase1] Scraping MagicBricks: {fallback_bhk} in {locality}, {city}...")
+        print(f"\n  [phase1] Scraping NoBroker: {fallback_bhk} in {locality}, {city}...")
+        nb_listings = []
         try:
-            mb_listings, mb_search_url = await self._scrape_magicbricks(
+            nb_listings, nb_search_url = await self._scrape_nobroker(
                 locality=locality, city=city, bhk_num=bhk_num
             )
         except Exception as exc:
-            print(f"  [phase1] MagicBricks scrape failed: {exc}")
-            mb_listings, mb_search_url = [], ""
-        print(f"  [phase1] MagicBricks returned {len(mb_listings)} cards (pre-filter)")
+            print(f"  [phase1] NoBroker scrape failed: {exc}")
+
+        print(f"  [phase1] NoBroker returned {len(nb_listings)} cards (pre-filter)")
+
+        if not nb_listings:
+            # Fallback to MagicBricks if NoBroker finds nothing
+            await self.send_update(
+                15,
+                f"🔍 Searching MagicBricks for {fallback_bhk} in {locality}, {city}...",
+                0,
+            )
+            print(f"\n  [phase1] Scraping MagicBricks: {fallback_bhk} in {locality}, {city}...")
+            try:
+                mb_listings, mb_search_url = await self._scrape_magicbricks(
+                    locality=locality, city=city, bhk_num=bhk_num
+                )
+            except Exception as exc:
+                print(f"  [phase1] MagicBricks scrape failed: {exc}")
+                mb_listings, mb_search_url = [], ""
+            print(f"  [phase1] MagicBricks returned {len(mb_listings)} cards (pre-filter)")
+            
+            listings_to_process = mb_listings
+        else:
+            listings_to_process = nb_listings
 
         # Filter: must mention requested BHK and the requested locality.
         # MagicBricks SRP often broadens results, so we filter client-side.
@@ -660,7 +850,7 @@ class ScraperAgent:
         loc_words = [w for w in loc_norm.split() if len(w) > 2]
         bhk_token = f"{bhk_num} bhk"
         filtered = []
-        for item in mb_listings:
+        for item in listings_to_process:
             blob = _norm(
                 f"{item.get('title','')} {item.get('society_name','')} "
                 f"{item.get('card_text','')}"
@@ -678,13 +868,13 @@ class ScraperAgent:
         if filtered:
             await self.send_update(
                 40,
-                f"✅ Found {len(filtered)} real listings on MagicBricks. Saving...",
+                f"✅ Found {len(filtered)} real listings on NoBroker/MagicBricks. Saving...",
                 len(filtered),
             )
         else:
             await self.send_update(
                 25,
-                f"No MagicBricks matches for {fallback_bhk} in {locality}. Trying web search...",
+                f"No matches found for {fallback_bhk} in {locality}. Trying web search...",
                 0,
             )
 
