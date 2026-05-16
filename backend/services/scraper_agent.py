@@ -105,7 +105,7 @@ class ScraperAgent:
     # HTTP helpers
     # ------------------------------------------------------------------
 
-    async def _scrape_safe(self, target_url: str, timeout: float = 8.0) -> Optional[str]:
+    async def _scrape_safe(self, target_url: str, timeout: float = 5.0) -> Optional[str]:
         """Wrapper for fetch that uses ScraperAPI to bypass bot protection."""
         api_key = os.getenv("SCRAPER_API_KEY")
         if not api_key:
@@ -122,7 +122,8 @@ class ScraperAgent:
             "country_code": "in",
         }
 
-        for attempt in range(2):
+        # Just one attempt to fail fast for mock data
+        for attempt in range(1):
             try:
                 # Fail fast to avoid Vercel 10s/15s lambda timeout
                 async with httpx.AsyncClient(timeout=timeout) as client:
@@ -131,12 +132,8 @@ class ScraperAgent:
                     response.raise_for_status()
                     return response.text
             except Exception as exc:
-                print(f"  [scrape_safe] {target_url[:60]} -> ERROR (attempt {attempt+1}/2): {exc}")
-                if attempt < 1:
-                    await asyncio.sleep(0.5)
-                else:
-                    print(f"  [scrape_safe] Failed after 2 attempts for {target_url}")
-                    return None
+                print(f"  [scrape_safe] {target_url[:60]} -> ERROR (attempt {attempt+1}/1): {exc}")
+                return None
         return None
 
     async def _direct_fetch(self, url: str, timeout: float = 12.0) -> Optional[str]:
@@ -302,10 +299,11 @@ class ScraperAgent:
             "api_key": api_key,
         }
 
-        for attempt in range(2):
+        # Just one attempt to fail fast for mock data
+        for attempt in range(1):
             try:
                 # Fail fast to avoid Vercel timeout
-                async with httpx.AsyncClient(timeout=5.0) as client:
+                async with httpx.AsyncClient(timeout=3.0) as client:
                     response = await client.get(url, params=params)
                     response.raise_for_status()
                     data = response.json()
@@ -322,11 +320,8 @@ class ScraperAgent:
                     print(f"  [serp_api] Found {len(results)} results for query: {query}")
                     return results
             except Exception as exc:
-                print(f"  [serp_api] ERROR (attempt {attempt+1}/2): {exc}")
-                if attempt < 1:
-                    await asyncio.sleep(0.5)
-                else:
-                    return []
+                print(f"  [serp_api] ERROR (attempt {attempt+1}/1): {exc}")
+                return []
         return []
 
     def _parse_ddg_results(self, html: str) -> list[dict]:
