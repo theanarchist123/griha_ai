@@ -10,7 +10,7 @@ import asyncio
 import uuid
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, BackgroundTasks
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/scrape", tags=["Scrape"])
@@ -72,13 +72,12 @@ class ScrapeStatusResponse(BaseModel):
 # ──────────────────────────────────────────────
 
 @router.post("/start", response_model=ScrapeStartResponse)
-async def start_scrape(req: ScrapeStartRequest):
+async def start_scrape(req: ScrapeStartRequest, background_tasks: BackgroundTasks):
     """
     Start a property scrape job.
 
     Uses PropertyFetcher (JSON-LD + CSS card extraction from MagicBricks)
     with optional ScraperAPI proxy when SCRAPER_API_KEY is set.
-    Runs synchronously so partial results are persisted even on timeout.
     """
     # Lazy import to avoid circular import at module-load time
     from services.property_fetcher import PropertyFetcher
@@ -94,37 +93,39 @@ async def start_scrape(req: ScrapeStartRequest):
     ws = MockWebSocket(job_id)
     agent = PropertyFetcher(ws)
 
-    try:
-        # Run with a 55-second timeout (Vercel Pro = 60 s max)
-        await asyncio.wait_for(
-            agent.run_scrape_workflow(req.location, req.bhk or "2 BHK"),
-            timeout=55.0,
-        )
-    except asyncio.TimeoutError:
-        job = _jobs.get(job_id)
-        if job:
-            job["progress"] = 100
-            job["status"] = (
-                "⏱️ Scrape timed out but partial results were saved. "
-                "Refresh your dashboard to see them."
+    async def run_task():
+        try:
+            # Run with a 55-second timeout (Vercel Pro = 60 s max)
+            await asyncio.wait_for(
+                agent.run_scrape_workflow(req.location, req.bhk or "2 BHK"),
+                timeout=55.0,
             )
-            job["done"] = True
-    except Exception as exc:
-        import traceback
-        traceback.print_exc()
-        job = _jobs.get(job_id)
-        if job:
-            job["progress"] = 100
-            job["status"] = f"❌ Error: {repr(exc)}"
-            job["done"] = True
+        except asyncio.TimeoutError:
+            job = _jobs.get(job_id)
+            if job:
+                job["progress"] = 100
+                job["status"] = (
+                    "⏱️ Scrape timed out but partial results were saved. "
+                    "Refresh your dashboard to see them."
+                )
+                job["done"] = True
+        except Exception as exc:
+            import traceback
+            traceback.print_exc()
+            job = _jobs.get(job_id)
+            if job:
+                job["progress"] = 100
+                job["status"] = f"❌ Error: {repr(exc)}"
+                job["done"] = True
 
-    final = _jobs.get(job_id, {})
+    background_tasks.add_task(run_task)
+
     return ScrapeStartResponse(
         job_id=job_id,
-        progress=final.get("progress", 100),
-        status=final.get("status", "Done"),
-        found_count=final.get("found_count", 0),
-        done=True,
+        progress=0,
+        status="🚀 Connecting to Griha AI Agent...",
+        found_count=0,
+        done=False,
     )
 
 

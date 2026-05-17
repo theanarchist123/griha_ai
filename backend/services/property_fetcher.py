@@ -601,7 +601,8 @@ class PropertyFetcher:
         html = None
         search_url = candidate_urls[0]
 
-        for url in candidate_urls:
+        for i, url in enumerate(candidate_urls):
+            await self.send_update(15 + (i * 5), f"🌐 Connecting to property source {i+1} of {len(candidate_urls)}...")
             print(f"  [fetch] Trying: {url}")
             fetched = await self._fetch_page(url)
             if not fetched or len(fetched) < 3000:
@@ -620,6 +621,7 @@ class PropertyFetcher:
             print(f"  [fetch] All URLs failed for {locality}, {city}")
             return []
 
+        await self.send_update(35, "🤖 Extracting property details from page...", 0)
         soup = BeautifulSoup(html, "lxml")
         jsonld = self._extract_from_jsonld(soup, search_url)
         cards = self._extract_from_cards(soup, search_url)
@@ -653,8 +655,13 @@ class PropertyFetcher:
 
     async def _persist_listings(self, listings: list[dict], locality: str, city: str, bhk: str) -> list[Property]:
         saved: list[Property] = []
+        total = len(listings)
 
-        for item in listings:
+        for idx, item in enumerate(listings):
+            if idx % 5 == 0:
+                progress = 40 + int((idx / total) * 30)
+                await self.send_update(progress, f"💾 Saving property {idx+1} of {total}...", len(saved))
+
             url = item.get("source_url", "")
             external_id = f"mb-{hashlib.sha1(url.encode()).hexdigest()[:18]}"
             society_name = item.get("society_name", "") or item.get("title", "")
