@@ -1,14 +1,9 @@
 """
 HTTP scrape routes for Griha AI.
 
-IMPORTANT: On Vercel serverless, BackgroundTasks are killed after the
-response is sent.  Therefore `/start` runs the scrape **synchronously**
-within the request and streams progress updates into an in-memory store
-that `/status/{job_id}` can poll.
-
-For Vercel Hobby (10 s) this will often time out.  We cap the scrape at
-~55 s so it fits inside Pro‑tier (60 s) limits.  If it times out, the
-partial results already saved to MongoDB are still queryable.
+Uses PropertyFetcher (the robust MagicBricks JSON-LD pipeline) instead of
+the older ScraperAgent.  ScraperAPI is used automatically when
+SCRAPER_API_KEY is present in the environment.
 """
 
 import asyncio
@@ -27,7 +22,7 @@ _jobs: Dict[str, Dict[str, Any]] = {}
 
 
 class MockWebSocket:
-    """Fake WebSocket so ScraperAgent can push progress into the job store."""
+    """Fake WebSocket so PropertyFetcher can push progress into the job store."""
 
     def __init__(self, job_id: str):
         self.job_id = job_id
@@ -81,13 +76,12 @@ async def start_scrape(req: ScrapeStartRequest):
     """
     Start a property scrape job.
 
-    On Vercel serverless, we run synchronously within this request
-    (BackgroundTasks die after response). The scrape saves results
-    directly to MongoDB. Even if the function times out after 10-60 s,
-    partial results are already persisted and queryable.
+    Uses PropertyFetcher (JSON-LD + CSS card extraction from MagicBricks)
+    with optional ScraperAPI proxy when SCRAPER_API_KEY is set.
+    Runs synchronously so partial results are persisted even on timeout.
     """
     # Lazy import to avoid circular import at module-load time
-    from services.scraper_agent import ScraperAgent
+    from services.property_fetcher import PropertyFetcher
 
     job_id = str(uuid.uuid4())
     _jobs[job_id] = {
@@ -98,7 +92,7 @@ async def start_scrape(req: ScrapeStartRequest):
     }
 
     ws = MockWebSocket(job_id)
-    agent = ScraperAgent(ws)
+    agent = PropertyFetcher(ws)
 
     try:
         # Run with a 55-second timeout (Vercel Pro = 60 s max)
@@ -111,8 +105,8 @@ async def start_scrape(req: ScrapeStartRequest):
         if job:
             job["progress"] = 100
             job["status"] = (
-                f"⏱️ Scrape timed out but partial results were saved. "
-                f"Refresh your dashboard to see them."
+                "⏱️ Scrape timed out but partial results were saved. "
+                "Refresh your dashboard to see them."
             )
             job["done"] = True
     except Exception as exc:
@@ -139,8 +133,6 @@ async def scrape_status(job_id: str):
     """Poll scrape job status."""
     job = _jobs.get(job_id)
     if not job:
-        # On serverless, the instance that ran /start is likely gone.
-        # Return "done" so frontend stops polling.
         return ScrapeStatusResponse(
             job_id=job_id,
             progress=100,
@@ -159,43 +151,56 @@ async def scrape_status(job_id: str):
 
 @router.get("/debug")
 async def debug_scrape():
-    """Diagnostic: test multiple property sites from Vercel."""
+    """Diagnostic: test connectivity to MagicBricks from this server."""
     import httpx
-    results = {}
-    test_urls = {
-        "magicbricks": "https://www.magicbricks.com/3-bhk-flats-for-rent-in-malad-east-mumbai-pppfr",
-        "nobroker": "https://www.nobroker.in/property/rent/mumbai/Malad+East?searchParam=W3sibGF0IjoxOS4xODU1MDIyLCJsb24iOjcyLjg2MTc2MTQsInBsYWNlSWQiOiJDaElKTjQwem0tYjk1anNSZno3M0F4N3RLOE0iLCJwbGFjZU5hbWUiOiJNYWxhZCBFYXN0In1d&orderBy=relevance&pageNo=1&bhk=3",
-        "housing_com": "https://housing.com/rent/in-malad-east-mumbai/3-bhk",
-    }
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/125.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml",
-    }
-    for name, url in test_urls.items():
-        try:
-            async with httpx.AsyncClient(timeout=15.0, follow_redirects=True, headers=headers) as client:
-                resp = await client.get(url)
-                text = resp.text
-                
-                # if NoBroker, look for scripts
-                scripts_info = []
-                if name == "nobroker":
-                    import re
-                    from bs4 import BeautifulSoup
-                    soup = BeautifulSoup(text, "lxml")
-                    for script in soup.find_all("script"):
-                        s_text = script.string or ""
-                        if "nb.appState" in s_text or "rent" in s_text.lower():
-                            scripts_info.append(s_text[:200])
+    import os
 
-                results[name] = {
+    results = {}
+    test_url = "https://www.magicbricks.com/2-bhk-flats-for-rent-in-andheri-east-mumbai-pppfr"
+    scraper_api_key = os.getenv("SCRAPER_API_KEY", "")
+
+    # Test 1: Direct fetch
+    try:
+        async with httpx.AsyncClient(
+            timeout=15.0,
+            follow_redirects=True,
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/126.0.0.0 Safari/537.36"},
+        ) as client:
+            resp = await client.get(test_url)
+            text = resp.text
+            results["direct"] = {
+                "status_code": resp.status_code,
+                "html_length": len(text),
+                "has_cards": ".mb-srp__card" in text,
+                "has_jsonld": "application/ld+json" in text,
+                "blocked": resp.status_code in (403, 429) or "access denied" in text.lower(),
+            }
+    except Exception as exc:
+        results["direct"] = {"error": str(exc)}
+
+    # Test 2: Via ScraperAPI (if key present)
+    if scraper_api_key:
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.get(
+                    "https://api.scraperapi.com/",
+                    params={
+                        "api_key": scraper_api_key,
+                        "url": test_url,
+                        "render": "false",
+                        "country_code": "in",
+                    },
+                )
+                text = resp.text
+                results["scraper_api"] = {
                     "status_code": resp.status_code,
                     "html_length": len(text),
-                    "has_listing_keywords": any(kw in text.lower() for kw in ["bhk", "rent", "sqft", "carpet"]),
-                    "blocked": resp.status_code in (403, 429) or "access denied" in text.lower(),
-                    "scripts_found": scripts_info,
+                    "has_cards": ".mb-srp__card" in text,
+                    "has_jsonld": "application/ld+json" in text,
                 }
         except Exception as exc:
-            results[name] = {"error": str(exc)}
-    return results
+            results["scraper_api"] = {"error": str(exc)}
+    else:
+        results["scraper_api"] = {"error": "SCRAPER_API_KEY not set"}
 
+    return results
