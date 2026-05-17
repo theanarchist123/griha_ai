@@ -2,23 +2,19 @@
 Property Fetcher — Robust replacement for the brittle scraper.
 
 Architecture:
-  1. PRIMARY: Fetch MagicBricks SRP pages using smart URL resolution
-     (multiple slug patterns to avoid 404s). Extract data from JSON-LD
-     structured data embedded in the page (Schema.org Apartment objects).
-  2. SECONDARY: Parse CSS card selectors as enrichment/fallback for
+  1. _fetch_page tries ScraperAPI first (when SCRAPER_API_KEY is set),
+     then falls back to a direct httpx request.
+  2. PRIMARY: Fetch MagicBricks SRP pages using smart URL resolution.
+     Extract data from JSON-LD structured data (Schema.org Apartment).
+  3. SECONDARY: Parse CSS card selectors as enrichment/fallback for
      fields missing from JSON-LD.
-  3. TERTIARY: Broader city-level search when locality-specific URLs 404.
-
-Key improvements over the old scraper:
-  - JSON-LD extraction is 10x more reliable than CSS-only parsing
-  - Smart URL resolution handles sub-cities (Ambernath→Beyond Thane)
-  - No DuckDuckGo dependency (was rate-limited/blocked)
-  - No LLM used for data extraction (LLM only for enrichment)
+  4. TERTIARY: Broader city-level search when locality-specific URLs 404.
 """
 
 import asyncio
 import hashlib
 import json
+import os
 import random
 import re
 from datetime import datetime
@@ -41,46 +37,26 @@ USER_AGENTS = [
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
 ]
 
-# Nominatim returns verbose city names. MagicBricks needs short ones.
 CITY_NORMALIZATION = {
-    "mumbai city district": "Mumbai",
-    "mumbai suburban district": "Mumbai",
-    "mumbai suburban": "Mumbai",
-    "mumbai city": "Mumbai",
-    "greater mumbai": "Mumbai",
-    "brihanmumbai": "Mumbai",
-    "bangalore urban": "Bangalore",
-    "bangalore urban district": "Bangalore",
-    "bengaluru urban": "Bangalore",
-    "bengaluru": "Bangalore",
-    "new delhi district": "Delhi",
-    "new delhi": "Delhi",
-    "south delhi": "Delhi",
-    "north delhi": "Delhi",
-    "central delhi": "Delhi",
-    "east delhi": "Delhi",
-    "west delhi": "Delhi",
-    "pune district": "Pune",
-    "pune city": "Pune",
-    "hyderabad district": "Hyderabad",
-    "chennai district": "Chennai",
-    "kolkata district": "Kolkata",
-    "thane district": "Thane",
-    "thane city": "Thane",
-    "gurugram": "Gurgaon",
-    "gurgaon district": "Gurgaon",
-    "gautam buddha nagar": "Noida",
-    "ghaziabad district": "Ghaziabad",
-    "faridabad district": "Faridabad",
-    "ahmedabad city": "Ahmedabad",
-    "ahmedabad district": "Ahmedabad",
-    "jaipur district": "Jaipur",
-    "lucknow district": "Lucknow",
-    "ernakulam": "Kochi",
-    "ernakulam district": "Kochi",
+    "mumbai city district": "Mumbai", "mumbai suburban district": "Mumbai",
+    "mumbai suburban": "Mumbai", "mumbai city": "Mumbai",
+    "greater mumbai": "Mumbai", "brihanmumbai": "Mumbai",
+    "bangalore urban": "Bangalore", "bangalore urban district": "Bangalore",
+    "bengaluru urban": "Bangalore", "bengaluru": "Bangalore",
+    "new delhi district": "Delhi", "new delhi": "Delhi",
+    "south delhi": "Delhi", "north delhi": "Delhi",
+    "central delhi": "Delhi", "east delhi": "Delhi", "west delhi": "Delhi",
+    "pune district": "Pune", "pune city": "Pune",
+    "hyderabad district": "Hyderabad", "chennai district": "Chennai",
+    "kolkata district": "Kolkata", "thane district": "Thane",
+    "thane city": "Thane", "gurugram": "Gurgaon",
+    "gurgaon district": "Gurgaon", "gautam buddha nagar": "Noida",
+    "ghaziabad district": "Ghaziabad", "faridabad district": "Faridabad",
+    "ahmedabad city": "Ahmedabad", "ahmedabad district": "Ahmedabad",
+    "jaipur district": "Jaipur", "lucknow district": "Lucknow",
+    "ernakulam": "Kochi", "ernakulam district": "Kochi",
 }
 
-# MagicBricks uses different parent-city slugs for outer suburbs.
 LOCALITY_SLUG_OVERRIDES = {
     "ambernath": ["ambernath-beyond-thane", "ambernath-thane", "ambernath"],
     "badlapur": ["badlapur-beyond-thane", "badlapur-thane", "badlapur"],
@@ -100,6 +76,12 @@ LOCALITY_SLUG_OVERRIDES = {
     "virar": ["virar-beyond-thane", "virar"],
     "nala sopara": ["nala-sopara-beyond-thane", "nala-sopara"],
 }
+
+# Fallback placeholder image so the UI never shows a broken img tag
+_FALLBACK_IMAGE = (
+    "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2"
+    "?w=800&h=600&fit=crop&q=80"
+)
 
 
 class PropertyFetcher:
@@ -142,18 +124,14 @@ class PropertyFetcher:
 
     @staticmethod
     def _normalize_city(city: str) -> str:
-        """Normalize verbose Nominatim city names to short MagicBricks names."""
         key = city.strip().lower()
         if key in CITY_NORMALIZATION:
             return CITY_NORMALIZATION[key]
-        # Strip common suffixes: "District", "Urban", "City" etc.
         cleaned = re.sub(
             r"\s+(city\s+district|suburban\s+district|urban\s+district|district|urban|city)$",
-            "", key, flags=re.IGNORECASE
+            "", key, flags=re.IGNORECASE,
         ).strip()
-        if cleaned:
-            return cleaned.title()
-        return city.strip()
+        return cleaned.title() if cleaned else city.strip()
 
     @staticmethod
     def _extract_location_parts(location: str) -> tuple[str, str]:
@@ -164,7 +142,7 @@ class PropertyFetcher:
         return locality, city
 
     # ------------------------------------------------------------------
-    # Price parsing
+    # Price / number parsing
     # ------------------------------------------------------------------
 
     @staticmethod
@@ -172,8 +150,10 @@ class PropertyFetcher:
         if not text:
             return None
         s = text.replace(",", "").replace("\u20b9", " ").lower()
-        # Remove noise like "See other charges", "Security Deposit"
-        s = re.sub(r"(see other|security|deposit|charges|/\s*month).*", "", s, flags=re.IGNORECASE)
+        s = re.sub(
+            r"(see other|security|deposit|charges|/\s*month).*", "", s,
+            flags=re.IGNORECASE,
+        )
         m = re.search(r"([\d.]+)\s*(cr|crore|lac|lakh|k)?", s)
         if not m:
             return None
@@ -188,7 +168,7 @@ class PropertyFetcher:
             num *= 1_00_000
         elif unit == "k":
             num *= 1_000
-        if num < 1000 or num > 1_00_00_00_000:
+        if num < 1_000 or num > 1_00_00_00_000:
             return None
         return num
 
@@ -207,10 +187,32 @@ class PropertyFetcher:
         return int(m.group(0)) if m else None
 
     # ------------------------------------------------------------------
-    # HTTP fetch
+    # HTTP fetch — ScraperAPI first, direct fallback
     # ------------------------------------------------------------------
 
-    async def _fetch_page(self, url: str, timeout: float = 20.0) -> Optional[str]:
+    async def _fetch_via_scraperapi(self, url: str, api_key: str, timeout: float) -> Optional[str]:
+        """Fetch through ScraperAPI to bypass bot-detection."""
+        params = {
+            "api_key": api_key,
+            "url": url,
+            "render": "false",          # HTML-only (faster, cheaper)
+            "country_code": "in",
+        }
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                resp = await client.get("https://api.scraperapi.com/", params=params)
+                print(f"  [scraperapi] {url[:70]} → HTTP {resp.status_code}, {len(resp.text)} chars")
+                if resp.status_code == 200 and len(resp.text) > 3000:
+                    return resp.text
+                # ScraperAPI itself returned an error page
+                print(f"  [scraperapi] Bad response: {resp.text[:200]}")
+                return None
+        except Exception as exc:
+            print(f"  [scraperapi] Error: {exc}")
+            return None
+
+    async def _fetch_direct(self, url: str, timeout: float) -> Optional[str]:
+        """Direct httpx fetch — may be blocked from datacenter IPs."""
         headers = {
             "User-Agent": self._random_ua(),
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -222,49 +224,58 @@ class PropertyFetcher:
             try:
                 verify = attempt == 0
                 async with httpx.AsyncClient(
-                    timeout=timeout, follow_redirects=True, headers=headers, verify=verify
+                    timeout=timeout, follow_redirects=True,
+                    headers=headers, verify=verify,
                 ) as client:
-                    response = await client.get(url)
-                    if response.status_code == 404:
+                    resp = await client.get(url)
+                    print(f"  [direct] {url[:70]} → HTTP {resp.status_code}, {len(resp.text)} chars")
+                    if resp.status_code == 404:
                         return None
-                    response.raise_for_status()
-                    return response.text
-            except Exception:
+                    resp.raise_for_status()
+                    return resp.text
+            except Exception as exc:
+                print(f"  [direct] attempt {attempt+1}: {exc}")
                 if attempt == 0:
                     await asyncio.sleep(0.5)
-                    continue
-                return None
         return None
+
+    async def _fetch_page(self, url: str, timeout: float = 30.0) -> Optional[str]:
+        """
+        Try ScraperAPI when SCRAPER_API_KEY is set; fall back to direct fetch.
+        The direct fetch works well for localhost/dev; ScraperAPI is needed on
+        Vercel / any datacenter IP that MagicBricks blocks.
+        """
+        api_key = os.getenv("SCRAPER_API_KEY", "").strip()
+        if api_key:
+            result = await self._fetch_via_scraperapi(url, api_key, timeout=min(timeout, 45.0))
+            if result:
+                return result
+            print("  [fetch] ScraperAPI failed, trying direct...")
+
+        return await self._fetch_direct(url, timeout)
 
     # ------------------------------------------------------------------
     # Smart URL resolution for MagicBricks
     # ------------------------------------------------------------------
 
     def _build_candidate_urls(self, locality: str, city: str, bhk_num: int) -> list[str]:
-        """Build prioritised list of MagicBricks SRP URLs to try."""
         loc_slug = self._slugify(locality)
         city_slug = self._slugify(city)
         urls: list[str] = []
 
-        # Check if locality has known slug overrides
         overrides = LOCALITY_SLUG_OVERRIDES.get(loc_slug, [])
         for override in overrides:
             urls.append(
                 f"https://www.magicbricks.com/{bhk_num}-bhk-flats-for-rent-in-{override}-pppfr"
             )
 
-        # Standard patterns
         urls.extend([
-            # locality-city (works for suburbs like Bandra West Mumbai)
             f"https://www.magicbricks.com/{bhk_num}-bhk-flats-for-rent-in-{loc_slug}-{city_slug}-pppfr",
-            # locality only (works for standalone cities like Thane, Kalyan)
             f"https://www.magicbricks.com/{bhk_num}-bhk-flats-for-rent-in-{loc_slug}-pppfr",
-            # City-level fallback (always works, returns 30 cards for the city)
             f"https://www.magicbricks.com/{bhk_num}-bhk-flats-for-rent-in-{city_slug}-pppfr",
         ])
 
-        # Deduplicate while preserving order
-        seen = set()
+        seen: set[str] = set()
         unique: list[str] = []
         for u in urls:
             if u not in seen:
@@ -273,11 +284,10 @@ class PropertyFetcher:
         return unique
 
     # ------------------------------------------------------------------
-    # JSON-LD extraction (PRIMARY — most reliable)
+    # JSON-LD extraction (PRIMARY)
     # ------------------------------------------------------------------
 
     def _extract_from_jsonld(self, soup: BeautifulSoup, search_url: str) -> list[dict]:
-        """Extract listings from JSON-LD Schema.org data embedded in the page."""
         listings: list[dict] = []
         seen_urls: set[str] = set()
 
@@ -304,7 +314,6 @@ class PropertyFetcher:
                 if isinstance(address, str):
                     address = {"addressLocality": address}
 
-                # Extract price from offers
                 price = None
                 offers = apt.get("offers", {})
                 if isinstance(offers, dict):
@@ -315,7 +324,6 @@ class PropertyFetcher:
                         except (TypeError, ValueError):
                             price = self._parse_price_inr(str(p))
 
-                # Extract floor size
                 size_sqft = None
                 floor_size = apt.get("floorSize", {})
                 if isinstance(floor_size, dict):
@@ -326,7 +334,6 @@ class PropertyFetcher:
                         except (TypeError, ValueError):
                             pass
 
-                # Extract images
                 images = []
                 img_data = apt.get("image", [])
                 if isinstance(img_data, str):
@@ -353,11 +360,10 @@ class PropertyFetcher:
         return listings
 
     # ------------------------------------------------------------------
-    # CSS card extraction (SECONDARY — fills gaps)
+    # CSS card extraction (SECONDARY)
     # ------------------------------------------------------------------
 
     def _extract_from_cards(self, soup: BeautifulSoup, search_url: str) -> list[dict]:
-        """Extract listings from MagicBricks SRP card HTML elements."""
         cards = soup.select(".mb-srp__card")
         listings: list[dict] = []
 
@@ -375,17 +381,14 @@ class PropertyFetcher:
             society = _txt(
                 card.select_one('[data-summary="society"] .mb-srp__card__summary--value')
             ) or None
-
             ca_text = _txt(
                 card.select_one('[data-summary="carpet-area"] .mb-srp__card__summary--value')
             )
             size_sqft = self._parse_int(ca_text)
-
             bath_text = _txt(
                 card.select_one('[data-summary="bathroom"] .mb-srp__card__summary--value')
             )
             bathrooms = self._parse_int(bath_text)
-
             furnishing = _txt(
                 card.select_one('[data-summary="furnishing"] .mb-srp__card__summary--value')
             ) or None
@@ -398,7 +401,6 @@ class PropertyFetcher:
                 elif "furn" in fl:
                     furnishing = "Fully Furnished"
 
-            # Images from card
             images: list[str] = []
             for img in card.select("img"):
                 src = (img.get("src") or img.get("data-src") or "").strip()
@@ -406,7 +408,6 @@ class PropertyFetcher:
                     images.append(src)
                     break
 
-            # PDP link
             href = ""
             for a in card.select("a[href]"):
                 h = a.get("href") or ""
@@ -414,7 +415,6 @@ class PropertyFetcher:
                     href = h
                     break
 
-            # Derive society name from title if not in summary
             apartment = society
             if not apartment:
                 m = re.search(r"for\s+Rent\s+in\s+(.+)", title, re.IGNORECASE)
@@ -436,39 +436,106 @@ class PropertyFetcher:
         return listings
 
     # ------------------------------------------------------------------
-    # Merge JSON-LD + Card data for best coverage
+    # SSR / SEO text fallback (TERTIARY — server-side rendered headings)
     # ------------------------------------------------------------------
 
-    def _merge_sources(
-        self, jsonld_listings: list[dict], card_listings: list[dict],
-        locality: str, city: str, bhk: str, bhk_num: int,
-    ) -> list[dict]:
-        """Merge JSON-LD and card data. Card data fills gaps in JSON-LD."""
-        merged: list[dict] = []
-        used_urls: set[str] = set()
+    def _extract_from_ssr(self, soup: BeautifulSoup, search_url: str) -> list[dict]:
+        """
+        MagicBricks server-renders each listing as an <h2> title + paragraph.
+        This fires when JS cards are absent (datacenter IPs without render=true).
+        """
+        listings: list[dict] = []
 
-        # First pass: use card listings as primary (they have more fields)
-        for card in card_listings:
-            url = card.get("source_url", "")
-            price = card.get("price")
+        def _txt(node) -> str:
+            return node.get_text(" ", strip=True) if node else ""
+
+        for h2 in soup.select("h2"):
+            h2_text = _txt(h2)
+            if "BHK" not in h2_text or "Rent" not in h2_text:
+                continue
+
+            desc_parts: list[str] = []
+            sibling = h2.find_next_sibling()
+            while sibling and getattr(sibling, "name", None) != "h2":
+                desc_parts.append(_txt(sibling))
+                sibling = sibling.find_next_sibling()
+            desc_blob = " ".join(desc_parts)
+
+            price = self._parse_price_inr(desc_blob)
             if not price:
                 continue
 
-            # Try to find matching JSON-LD entry for images
-            jsonld_images = []
-            for jl in jsonld_listings:
-                jl_url = jl.get("source_url", "")
-                if jl_url and jl_url in url or url in jl_url:
-                    jsonld_images = jl.get("images", [])
-                    break
+            sqft_m = re.search(r"(\d[\d,]*)\s*sq\s*ft", desc_blob, re.IGNORECASE)
+            size_sqft = int(sqft_m.group(1).replace(",", "")) if sqft_m else None
 
-            images = card.get("images", []) or jsonld_images
-            society = card.get("society_name", "")
+            bath_m = re.search(r"(\d+)\s*bath", desc_blob, re.IGNORECASE)
+            bathrooms = int(bath_m.group(1)) if bath_m else None
 
+            furnishing = None
+            dl = desc_blob.lower()
+            if "semi" in dl and "furnish" in dl:
+                furnishing = "Semi Furnished"
+            elif "unfurnish" in dl:
+                furnishing = "Unfurnished"
+            elif "fully" in dl and "furnish" in dl:
+                furnishing = "Fully Furnished"
+            elif "furnished" in dl:
+                furnishing = "Furnished"
+
+            society = None
+            h2_link = h2.find("a")
+            if h2_link:
+                society = _txt(h2_link)
+            if not society:
+                m_apt = re.search(r"for\s+Rent\s+in\s+(.+)", h2_text, re.IGNORECASE)
+                if m_apt:
+                    society = m_apt.group(1).split(",")[0].strip()
+
+            listings.append({
+                "title": h2_text,
+                "price": price,
+                "society_name": society or h2_text,
+                "size_sqft": size_sqft,
+                "bathrooms": bathrooms,
+                "furnishing": furnishing,
+                "images": [],
+                "source_url": search_url,
+                "source": "ssr",
+            })
+
+        return listings
+
+    # ------------------------------------------------------------------
+    # Merge all sources
+    # ------------------------------------------------------------------
+
+    def _merge_sources(
+        self,
+        jsonld_listings: list[dict],
+        card_listings: list[dict],
+        ssr_listings: list[dict],
+        locality: str,
+        city: str,
+        bhk: str,
+        bhk_num: int,
+    ) -> list[dict]:
+        merged: list[dict] = []
+        used_urls: set[str] = set()
+
+        # Cards first (richest fields)
+        for card in card_listings:
+            url = card.get("source_url", "")
+            if not card.get("price"):
+                continue
+            jl_images = next(
+                (jl.get("images", []) for jl in jsonld_listings if jl.get("source_url", "") in url or url in jl.get("source_url", "")),
+                [],
+            )
+            images = card.get("images", []) or jl_images
             merged.append({
                 "title": card["title"][:120],
-                "society_name": society,
-                "price": price,
+                "society_name": card.get("society_name", ""),
+                "price": card["price"],
                 "size_sqft": card.get("size_sqft"),
                 "bathrooms": card.get("bathrooms"),
                 "furnishing": card.get("furnishing"),
@@ -480,12 +547,11 @@ class PropertyFetcher:
             })
             used_urls.add(url)
 
-        # Second pass: add JSON-LD entries not already covered
+        # JSON-LD entries not already covered
         for jl in jsonld_listings:
             url = jl.get("source_url", "")
             if url in used_urls or not jl.get("price"):
                 continue
-
             merged.append({
                 "title": jl.get("title", "")[:120],
                 "society_name": jl.get("title", "").split("for Rent")[0].strip() or jl.get("title", ""),
@@ -499,6 +565,26 @@ class PropertyFetcher:
                 "city": jl.get("city") or city,
                 "bhk": bhk,
             })
+            used_urls.add(url)
+
+        # SSR entries as last resort
+        for ssr in ssr_listings:
+            url = ssr.get("source_url", "")
+            if url in used_urls or not ssr.get("price"):
+                continue
+            merged.append({
+                "title": ssr["title"][:120],
+                "society_name": ssr.get("society_name", ""),
+                "price": ssr["price"],
+                "size_sqft": ssr.get("size_sqft"),
+                "bathrooms": ssr.get("bathrooms"),
+                "furnishing": ssr.get("furnishing"),
+                "images": [],
+                "source_url": url,
+                "locality": locality,
+                "city": city,
+                "bhk": bhk,
+            })
 
         return merged
 
@@ -507,7 +593,6 @@ class PropertyFetcher:
     # ------------------------------------------------------------------
 
     async def _fetch_listings(self, locality: str, city: str, bhk: str) -> list[dict]:
-        """Fetch listings from MagicBricks with smart URL resolution."""
         bhk_num = self._bhk_number(bhk) or 2
         candidate_urls = self._build_candidate_urls(locality, city, bhk_num)
         loc_norm = self._norm(locality)
@@ -519,15 +604,13 @@ class PropertyFetcher:
         for url in candidate_urls:
             print(f"  [fetch] Trying: {url}")
             fetched = await self._fetch_page(url)
-            if not fetched or len(fetched) < 5000:
-                print(f"  [fetch] Failed or too short")
+            if not fetched or len(fetched) < 3000:
+                print(f"  [fetch] Failed or too short ({len(fetched) if fetched else 0} chars)")
                 continue
-
-            # Check if this is a city-level fallback
             city_slug = self._slugify(city)
-            if url.endswith(f"-{city_slug}-pppfr") and self._slugify(locality) not in url.replace(f"-{city_slug}-pppfr", ""):
+            loc_slug = self._slugify(locality)
+            if url.endswith(f"-{city_slug}-pppfr") and loc_slug not in url.replace(f"-{city_slug}-pppfr", ""):
                 is_city_level = True
-
             html = fetched
             search_url = url
             print(f"  [fetch] Got {len(html)} bytes from {url}")
@@ -538,47 +621,31 @@ class PropertyFetcher:
             return []
 
         soup = BeautifulSoup(html, "lxml")
-
-        # Extract from both sources
         jsonld = self._extract_from_jsonld(soup, search_url)
         cards = self._extract_from_cards(soup, search_url)
-        print(f"  [fetch] JSON-LD: {len(jsonld)} | Cards: {len(cards)}")
+        ssr = self._extract_from_ssr(soup, search_url) if not cards else []
+        print(f"  [fetch] JSON-LD: {len(jsonld)} | Cards: {len(cards)} | SSR: {len(ssr)}")
 
-        # Merge
-        merged = self._merge_sources(jsonld, cards, locality, city, bhk, bhk_num)
+        merged = self._merge_sources(jsonld, cards, ssr, locality, city, bhk, bhk_num)
 
-        # Filter by locality if not city-level (city-level returns mixed localities)
-        if not is_city_level and loc_norm:
-            bhk_token = f"{bhk_num} bhk"
-            filtered = []
-            for item in merged:
-                blob = self._norm(
-                    f"{item.get('title', '')} {item.get('society_name', '')} "
-                    f"{item.get('locality', '')}"
-                )
-                # BHK must match
-                if bhk_token not in blob:
-                    continue
-                filtered.append(item)
+        bhk_token = f"{bhk_num} bhk"
+
+        if not is_city_level:
+            filtered = [
+                item for item in merged
+                if bhk_token in self._norm(f"{item.get('title','')} {item.get('society_name','')}")
+            ]
             print(f"  [fetch] After BHK filter: {len(filtered)} / {len(merged)}")
             return filtered
         else:
-            # For city-level, filter by locality mention if possible
-            filtered = []
-            for item in merged:
-                blob = self._norm(
-                    f"{item.get('title', '')} {item.get('society_name', '')} "
-                    f"{item.get('locality', '')}"
-                )
-                if loc_norm in blob:
-                    filtered.append(item)
-            # If locality filter removes everything, return all (broader results)
-            if filtered:
-                print(f"  [fetch] City-level locality filter: {len(filtered)} matched")
-                return filtered
-            else:
-                print(f"  [fetch] City-level: no locality match, returning all {len(merged)}")
-                return merged[:20]
+            # City-level: try to narrow to locality first, else return all
+            locality_filtered = [
+                item for item in merged
+                if loc_norm in self._norm(f"{item.get('title','')} {item.get('locality','')}")
+            ]
+            result = locality_filtered if locality_filtered else merged[:20]
+            print(f"  [fetch] City-level result: {len(result)}")
+            return result
 
     # ------------------------------------------------------------------
     # Persist to MongoDB
@@ -587,16 +654,11 @@ class PropertyFetcher:
     async def _persist_listings(self, listings: list[dict], locality: str, city: str, bhk: str) -> list[Property]:
         saved: list[Property] = []
 
-        for idx, item in enumerate(listings):
+        for item in listings:
             url = item.get("source_url", "")
             external_id = f"mb-{hashlib.sha1(url.encode()).hexdigest()[:18]}"
-
             society_name = item.get("society_name", "") or item.get("title", "")
-            images = item.get("images", [])
-            if not images:
-                images = [
-                    "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=800&h=600&fit=crop&q=80"
-                ]
+            images = item.get("images") or [_FALLBACK_IMAGE]
 
             payload = {
                 "external_id": external_id,
@@ -619,7 +681,7 @@ class PropertyFetcher:
                 "amenities": [],
                 "description": (
                     f"{bhk} apartment at {society_name} in {locality}, {city}. "
-                    "Sourced from MagicBricks structured data."
+                    "Sourced from MagicBricks."
                 ),
                 "listed_days_ago": 0,
                 "is_fake": False,
@@ -643,84 +705,63 @@ class PropertyFetcher:
                     saved.append(new_prop)
                 print(f"    [saved] {society_name[:40]} — INR {item['price']:,.0f}/mo")
             except Exception as e:
-                print(f"    [error] Failed to save: {e}")
+                print(f"    [error] {e}")
                 continue
 
         return saved
 
     # ------------------------------------------------------------------
-    # Main workflow (drop-in replacement for ScraperAgent.run_scrape_workflow)
+    # Main workflow
     # ------------------------------------------------------------------
 
     async def run_scrape_workflow(self, location: str, bhk: str):
-        """Main entry point — called from WebSocket handler."""
         await self.send_update(5, f"🚀 Starting property search for {bhk} in {location}...")
         await asyncio.sleep(0.3)
 
         locality, city = self._extract_location_parts(location)
         fallback_bhk = bhk if bhk and bhk != "Any BHK" else "2 BHK"
 
+        scraper_api_key = os.getenv("SCRAPER_API_KEY", "").strip()
+        proxy_note = "via ScraperAPI" if scraper_api_key else "direct (add SCRAPER_API_KEY to .env for better results)"
+
         try:
-            # Phase 1: Fetch from MagicBricks
             await self.send_update(
                 15,
-                f"🔍 Searching MagicBricks for {fallback_bhk} in {locality}, {city}...",
+                f"🔍 Searching MagicBricks for {fallback_bhk} in {locality}, {city} ({proxy_note})...",
                 0,
             )
 
-            print(f"\n[fetcher] Starting: {fallback_bhk} in {locality}, {city}")
+            print(f"\n[fetcher] {fallback_bhk} in {locality}, {city}  [{proxy_note}]")
             listings = await self._fetch_listings(locality, city, fallback_bhk)
             print(f"[fetcher] Got {len(listings)} listings")
 
-            if listings:
-                await self.send_update(
-                    40,
-                    f"✅ Found {len(listings)} listings on MagicBricks. Saving...",
-                    len(listings),
-                )
-            else:
+            if not listings:
                 await self.send_update(
                     100,
-                    f"⚠️ No listings found for {fallback_bhk} in {locality}. "
-                    "Try a nearby locality (e.g., 'Bandra West, Mumbai').",
+                    (
+                        f"⚠️ No listings found for {fallback_bhk} in {locality}. "
+                        "Try a nearby locality (e.g., 'Andheri East, Mumbai') or check SCRAPER_API_KEY."
+                    ),
                     0,
                 )
                 return
 
-            # Phase 2: Persist to database
-            await self.send_update(50, f"💾 Saving {len(listings)} properties...", len(listings))
+            await self.send_update(40, f"✅ Found {len(listings)} listings. Saving...", len(listings))
+
             saved = await self._persist_listings(listings, locality, city, fallback_bhk)
-            print(f"[fetcher] Saved {len(saved)} properties to DB")
+            print(f"[fetcher] Saved {len(saved)} properties")
 
             if saved:
-                # Phase 3: AI enrichment
-                await self.send_update(
-                    75,
-                    f"🤖 Generating AI insights for {len(saved)} properties...",
-                    len(saved),
-                )
+                await self.send_update(75, f"🤖 Generating AI insights for {len(saved)} properties...", len(saved))
                 try:
                     await self.content_service.enrich_recent(saved)
                 except Exception:
                     pass
-
                 await asyncio.sleep(0.3)
-                await self.send_update(
-                    100,
-                    f"✅ Done! {len(saved)} real properties with AI insights ready.",
-                    len(saved),
-                )
+                await self.send_update(100, f"✅ Done! {len(saved)} properties ready on your dashboard.", len(saved))
             else:
-                await self.send_update(
-                    100,
-                    "⚠️ Could not save listings. Please retry.",
-                    0,
-                )
+                await self.send_update(100, "⚠️ Could not save listings. Please retry.", 0)
 
         except Exception as exc:
             print(f"[fetcher] Error: {exc}")
-            await self.send_update(
-                100,
-                f"❌ Error: {str(exc)[:100]}. Please retry.",
-                0,
-            )
+            await self.send_update(100, f"❌ Error: {str(exc)[:120]}. Please retry.", 0)
