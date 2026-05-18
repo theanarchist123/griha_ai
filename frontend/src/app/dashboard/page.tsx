@@ -349,7 +349,17 @@ export default function DashboardPage() {
 
         setTopMatches(apiProperties.map(normalizeProperty));
         setPipelineData({ shortlisted: [], underReview: [], negotiating: [], offerMade: [] });
-        setRecentActivity([]);
+
+        // Fetch real activity feed
+        try {
+          const actRes = await fetch(`${(process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "")}/api/activity/?limit=20`);
+          const actJson = await actRes.json();
+          if (actJson.status === "success" && Array.isArray(actJson.data)) {
+            setRecentActivity(actJson.data);
+          }
+        } catch {
+          // Non-fatal: activity feed is optional
+        }
 
         // ============================================================
         // AUTO-TRIGGER SCRAPING — only once per unique location+bhk combo

@@ -23,19 +23,24 @@ import {
   Menu,
   X,
   Shield,
+  CheckCircle2,
+  Zap,
+  FileSearch,
 } from "lucide-react";
+
 
 const NAV_ITEMS = [
   { label: "My Matches", href: "/dashboard", icon: Home, badge: 8 },
   { label: "Browse", href: "/browse", icon: Search },
   { label: "Pipeline", href: "/pipeline", icon: BarChart3 },
-  { label: "Legal Checks", href: "/legal/prop-1", icon: Scale },
-  { label: "Negotiations", href: "/negotiate/prop-1", icon: MessageSquare },
+  { label: "Legal Checks", href: "/browse", icon: Scale },
+  { label: "Negotiations", href: "/browse", icon: MessageSquare },
   { label: "Documents", href: "/documents", icon: FileText },
   { label: "Contract AI", href: "/contract", icon: Shield },
   { label: "Neighbourhood", href: "/neighbourhood/bandra-west", icon: MapPin },
   { label: "Preferences", href: "/preferences", icon: Settings },
 ];
+
 
 // Shared state for mobile sidebar
 let _sidebarListeners: Array<(open: boolean) => void> = [];
@@ -184,6 +189,35 @@ export function DashboardTopBar({ filters, onApplyFilters }: DashboardTopBarProp
   const [locating, setLocating] = useState(false);
   const [locationStatus, setLocationStatus] = useState("");
   const searchRef = useRef<HTMLDivElement>(null);
+
+  // Notification panel state
+  const [showNotifPanel, setShowNotifPanel] = useState(false);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [notifLoading, setNotifLoading] = useState(false);
+
+  useEffect(() => {
+    if (!showNotifPanel) return;
+    setNotifLoading(true);
+    fetch(`${(process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "")}/api/activity/?limit=15`)
+      .then(r => r.json())
+      .then(json => {
+        if (json.status === "success" && Array.isArray(json.data)) setNotifications(json.data);
+      })
+      .catch(() => {})
+      .finally(() => setNotifLoading(false));
+  }, [showNotifPanel]);
+
+  // Close notification panel on outside click
+  useEffect(() => {
+    if (!showNotifPanel) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest("[data-notif-panel]")) setShowNotifPanel(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showNotifPanel]);
+
 
   useEffect(() => {
     setDraftFilters(filters || defaultFilters);
@@ -548,10 +582,67 @@ export function DashboardTopBar({ filters, onApplyFilters }: DashboardTopBarProp
               </button>
             </SignInButton>
           </SignedOut>
-          <button className="relative p-2.5 bg-surface border border-border-custom hover:border-forest/50 rounded-xl transition-all hover:shadow-sm">
+          <button
+            className="relative p-2.5 bg-surface border border-border-custom hover:border-forest/50 rounded-xl transition-all hover:shadow-sm"
+            onClick={() => setShowNotifPanel(v => !v)}
+            data-notif-panel
+          >
             <Bell className="w-4 h-4 text-charcoal" />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-danger border border-white rounded-full" />
+            {notifications.length > 0 && (
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-danger border border-white rounded-full" />
+            )}
           </button>
+          {/* Notification panel */}
+          <AnimatePresence>
+            {showNotifPanel && (
+              <motion.div
+                data-notif-panel
+                initial={{ opacity: 0, y: -8, scale: 0.97 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -8, scale: 0.97 }}
+                className="absolute top-16 right-4 w-80 bg-surface border border-border-custom rounded-2xl shadow-xl z-50 overflow-hidden"
+              >
+                <div className="flex items-center justify-between px-4 py-3 border-b border-border-custom">
+                  <p className="font-dm font-bold text-charcoal text-sm">Notifications</p>
+                  <button onClick={() => setShowNotifPanel(false)}>
+                    <X className="w-4 h-4 text-muted" />
+                  </button>
+                </div>
+                <div className="max-h-80 overflow-y-auto">
+                  {notifLoading ? (
+                    <div className="flex justify-center py-6">
+                      <Loader2 className="w-5 h-5 animate-spin text-forest" />
+                    </div>
+                  ) : notifications.length === 0 ? (
+                    <div className="py-8 text-center">
+                      <CheckCircle2 className="w-8 h-8 text-muted mx-auto mb-2" />
+                      <p className="text-xs font-dm text-muted">All caught up! No new notifications.</p>
+                    </div>
+                  ) : (
+                    notifications.slice(0, 8).map((n: any) => (
+                      <div key={n.id} className="flex gap-3 px-4 py-3 hover:bg-cream transition-colors border-b border-border-custom last:border-0">
+                        <div className="w-8 h-8 rounded-full bg-forest/10 flex items-center justify-center shrink-0">
+                          {n.type === "scrape" ? <Zap className="w-4 h-4 text-forest" /> :
+                           n.type === "document" ? <FileSearch className="w-4 h-4 text-forest" /> :
+                           <Bell className="w-4 h-4 text-forest" />}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-dm font-semibold text-charcoal leading-snug">{n.text}</p>
+                          <p className="text-[10px] text-muted mt-0.5">{n.timestamp}</p>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+                <div className="border-t border-border-custom p-2">
+                  <Link href="/activity" onClick={() => setShowNotifPanel(false)} className="block w-full text-center py-2 text-xs font-dm font-semibold text-forest hover:bg-forest/5 rounded-lg transition-colors">
+                    View all activity →
+                  </Link>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           <Link href="/activity" className="p-2.5 bg-surface border border-border-custom hover:border-forest/50 rounded-xl transition-all hover:shadow-sm">
             <Activity className="w-4 h-4 text-charcoal" />
           </Link>

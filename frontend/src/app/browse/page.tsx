@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { Suspense, useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
@@ -12,6 +12,7 @@ import { PropertyCard } from "@/components/shared/PropertyCard";
 import type { Property } from "@/lib/mockData";
 import { formatPrice } from "@/lib/utils";
 import { STATIC_IMAGES } from "@/lib/unsplash";
+
 
 const BHK_OPTIONS = ["Any BHK", "1 BHK", "1 RK", "2 BHK", "3 BHK", "4 BHK", "4+ BHK"];
 const SORT_OPTIONS = [
@@ -68,6 +69,18 @@ function sortProperties(props: Property[], sort: string): Property[] {
 }
 
 export default function BrowsePage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-cream flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-forest" />
+      </div>
+    }>
+      <BrowsePageInner />
+    </Suspense>
+  );
+}
+
+function BrowsePageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
