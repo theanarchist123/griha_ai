@@ -53,34 +53,86 @@ export function AIChatWidget() {
     }
   }, [isOpen, messages.length, scrollToBottom]);
 
+  // Track last successful search params for follow-up context
+  const lastSearchRef = useRef<Record<string, string>>({});
+
   const parseSearchIntent = (query: string) => {
     const params: Record<string, string> = {};
 
-    // BHK
-    const bhkMatch = query.match(/(\d\+?\s*(?:bhk|rk))/i);
-    if (bhkMatch) params.bhk = bhkMatch[1].toUpperCase().replace(/\s+/g, " ");
+    // Normalize: strip command prefixes
+    let q = query
+      .replace(/^(?:find|show|get|search|look for|looking for|i want|i need|give me|can you find|please find)\s+(?:me\s+)?/i, "")
+      .replace(/^(?:any|some|all)\s+/i, "")
+      .trim();
 
-    // Location — everything after "in" or "near" or "at"
-    const locMatch = query.match(/(?:in|near|at|around)\s+([A-Za-z][A-Za-z\s,]+?)(?:\s+(?:under|below|within|with|for|budget|max|priced)|$)/i);
-    if (locMatch) params.location = locMatch[1].trim();
-
-    // Price
-    const priceMatch = query.match(/(?:under|below|within|budget|max|upto|up to)\s*₹?\s*(\d+)\s*k?/i);
-    if (priceMatch) {
-      let price = parseInt(priceMatch[1]);
-      if (price < 1000) price *= 1000; // "40k" → 40000
-      params.max_price = String(price);
+    // BHK extraction
+    const bhkMatch = q.match(/(\d\+?)\s*(?:bhk|rk|bed(?:room)?s?)/i);
+    if (bhkMatch) {
+      params.bhk = `${bhkMatch[1]} BHK`;
+      q = q.replace(bhkMatch[0], " ").trim();
     }
 
-    // If no location found, try the whole string minus BHK/price keywords
+    // Price extraction — handle k, K, lakh, L, lac, cr, crore
+    const pricePatterns = [
+      /(?:under|below|within|budget|max|upto|up\s*to|less\s*than|not\s*(?:more|above)\s*than)\s*₹?\s*(\d+(?:\.\d+)?)\s*(k|l|lakh|lac|lacs|cr|crore)?/i,
+      /₹\s*(\d+(?:\.\d+)?)\s*(k|l|lakh|lac|lacs|cr|crore)?\s*(?:budget|max)?/i,
+      /(\d+(?:\.\d+)?)\s*(k|l|lakh|lac|lacs|cr|crore)\s*(?:budget|rent|price)?/i,
+    ];
+    for (const pattern of pricePatterns) {
+      const priceMatch = q.match(pattern);
+      if (priceMatch) {
+        let price = parseFloat(priceMatch[1]);
+        const suffix = (priceMatch[2] || "").toLowerCase();
+        if (suffix === "k") price *= 1000;
+        else if (suffix === "l" || suffix === "lakh" || suffix === "lac" || suffix === "lacs") price *= 100000;
+        else if (suffix === "cr" || suffix === "crore") price *= 10000000;
+        else if (price < 500) price *= 1000; // bare number < 500 → assume thousands (e.g. "40" → 40k)
+        params.max_price = String(Math.round(price));
+        q = q.replace(priceMatch[0], " ").trim();
+        break;
+      }
+    }
+
+    // Location extraction — multi-pass
+    // Pass 1: after "in", "near", "at", "around", "from"
+    const locPatterns = [
+      /(?:in|near|at|around|from)\s+([A-Za-z][A-Za-z\s,.-]+?)(?:\s*$|\s+(?:under|below|within|with|for|budget|max|priced|that|which|having))/i,
+      /(?:in|near|at|around|from)\s+([A-Za-z][A-Za-z\s,.-]+)$/i,
+    ];
+    for (const pattern of locPatterns) {
+      const locMatch = q.match(pattern);
+      if (locMatch) {
+        params.location = locMatch[1].replace(/[,.]$/,"").trim();
+        break;
+      }
+    }
+
+    // Pass 2: if no location, clean remaining text and use as location
     if (!params.location) {
-      const cleaned = query
-        .replace(/(\d+\s*(?:bhk|rk))/gi, "")
-        .replace(/(?:under|below|within|budget|max|upto|up to)\s*₹?\s*\d+\s*k?/gi, "")
-        .replace(/(?:pet[- ]?friendly|with parking|gated|furnished|semi[- ]?furnished)/gi, "")
+      const cleaned = q
+        .replace(/(\d+\s*(?:bhk|rk|bed(?:room)?s?))/gi, "")
+        .replace(/(?:pet[- ]?friendly|with\s+parking|gated|furnished|semi[- ]?furnished|with\s+gym|with\s+pool|with\s+lift)/gi, "")
+        .replace(/(?:apartments?|flats?|homes?|house|properties|listings?|rentals?)/gi, "")
+        .replace(/(?:cheap|affordable|luxury|premium|best|good|nice|spacious)/gi, "")
+        .replace(/\s+/g, " ")
         .trim();
-      if (cleaned.length > 2) params.location = cleaned;
+      // Only use if it looks like a place name (2+ chars, starts with letter)
+      if (cleaned.length >= 2 && /^[A-Za-z]/.test(cleaned)) {
+        params.location = cleaned;
+      }
     }
+
+    // Clean location of trailing junk
+    if (params.location) {
+      params.location = params.location
+        .replace(/\s+(with|that|which|having|and|or)\s*$/i, "")
+        .trim();
+    }
+
+    // Amenity flags
+    if (/pet[- ]?friendly/i.test(query)) params.pet = "true";
+    if (/parking/i.test(query)) params.parking = "true";
+    if (/gated/i.test(query)) params.gated = "true";
 
     return params;
   };
@@ -100,16 +152,33 @@ export function AIChatWidget() {
     setLoading(true);
 
     try {
-      const params = parseSearchIntent(query);
+      let params = parseSearchIntent(query);
+
+      // Context: if user says generic follow-up, reuse last search params
+      const isFollowUp = /^(?:show|list|any|all|more|yes|ok|sure|go ahead|no (?:budget|restriction|limit)|without|remove|drop)\b/i.test(query)
+        || query.length < 15;
+      if (!params.location && !params.bhk && isFollowUp && Object.keys(lastSearchRef.current).length > 0) {
+        // Merge: keep last search context, but allow overrides
+        params = { ...lastSearchRef.current, ...params };
+        // If user says "no budget/restriction" → remove price filter
+        if (/no\s*(?:budget|restriction|limit|price)/i.test(query) || /all\s*prices?/i.test(query) || /remove\s*(?:budget|price|filter)/i.test(query)) {
+          delete params.max_price;
+        }
+      }
+
+      // Save for follow-up context
+      if (params.location || params.bhk) {
+        lastSearchRef.current = { ...params };
+      }
+
       const searchParams = new URLSearchParams();
       if (params.location) searchParams.set("location", params.location);
       if (params.bhk) searchParams.set("bhk", params.bhk);
       if (params.max_price) searchParams.set("max_price", params.max_price);
       searchParams.set("limit", "5");
 
-      const res = await fetch(
-        `${(process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "")}/api/properties/?${searchParams.toString()}`
-      );
+      const apiBase = (process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
+      const res = await fetch(`${apiBase}/api/properties/?${searchParams.toString()}`);
       const json = await res.json();
 
       if (json.status === "success" && Array.isArray(json.data) && json.data.length > 0) {
@@ -134,13 +203,24 @@ export function AIChatWidget() {
         };
         setMessages(prev => [...prev, aiMsg]);
       } else {
-        const aiMsg: ChatMessage = {
+        // Distinguish: did we parse anything vs completely empty
+        const parsed = params.location || params.bhk;
+        const locationNote = params.location ? `"${params.location}"` : "the specified area";
+        const bhkNote = params.bhk || "";
+
+        let content: string;
+        if (parsed) {
+          content = `No ${bhkNote} properties found in ${locationNote} right now. This area might not have scraped listings yet.\n\n💡 Go to the Dashboard, enter "${params.location || ""}" in the search bar, and hit "Scrape Live" to fetch fresh listings from MagicBricks, 99acres, etc.`;
+        } else {
+          content = `I couldn't understand that query. Try something like:\n• "2BHK in Andheri"\n• "3BHK near Bandra under 50k"\n• "Flats in Powai"\n\nJust mention a location and I'll search!`;
+        }
+
+        setMessages(prev => [...prev, {
           id: `ai-${Date.now()}`,
           role: "assistant",
-          content: `I couldn't find properties matching "${query}". Try specifying a location like "2BHK in Andheri under 30k" or adjust your filters. You can also start a scrape from the dashboard to fetch fresh listings!`,
+          content,
           timestamp: new Date(),
-        };
-        setMessages(prev => [...prev, aiMsg]);
+        }]);
       }
     } catch {
       setMessages(prev => [
@@ -148,7 +228,7 @@ export function AIChatWidget() {
         {
           id: `err-${Date.now()}`,
           role: "assistant",
-          content: "Oops — couldn't connect to the server right now. Try again in a moment.",
+          content: "Couldn't connect to server right now. Try again in a moment.",
           timestamp: new Date(),
         },
       ]);
