@@ -6,7 +6,7 @@ import { cn, formatPrice } from "@/lib/utils";
 import { MapPin, Maximize2, Building2, AlertTriangle, Bookmark, BookmarkCheck } from "lucide-react";
 import type { Property } from "@/lib/mockData";
 import { useUser, SignInButton } from "@clerk/nextjs";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { toast } from "react-hot-toast";
 
 interface PropertyCardProps {
@@ -27,16 +27,10 @@ export function PropertyCard({ property, className }: PropertyCardProps) {
   const [isSaved, setIsSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  useEffect(() => {
-    if (isLoaded && user && property.id) {
-      fetch(`${(process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "")}/api/pipeline/check/${property.id}?clerk_id=${user.id}`)
-        .then(res => res.json())
-        .then(data => {
-          if (data.saved) setIsSaved(true);
-        })
-        .catch(console.error);
-    }
-  }, [isLoaded, user, property.id]);
+  // NOTE: We intentionally do NOT pre-check saved status on card mount.
+  // Firing one request per card creates a parallel connection storm on MongoDB Atlas.
+  // The property detail page checks status (single page = single request).
+  // Cards show live state after the user saves during the current session.
 
   const handleSave = async (e: React.MouseEvent) => {
     e.preventDefault(); // Prevent navigating to detail page
