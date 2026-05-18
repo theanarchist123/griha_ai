@@ -20,6 +20,8 @@ import {
   SlidersHorizontal,
   LocateFixed,
   Loader2,
+  Menu,
+  X,
 } from "lucide-react";
 
 const NAV_ITEMS = [
@@ -32,10 +34,29 @@ const NAV_ITEMS = [
   { label: "Preferences", href: "/preferences", icon: Settings },
 ];
 
+// Shared state for mobile sidebar
+let _sidebarListeners: Array<(open: boolean) => void> = [];
+let _sidebarOpen = false;
+
+export function toggleMobileSidebar() {
+  _sidebarOpen = !_sidebarOpen;
+  _sidebarListeners.forEach(fn => fn(_sidebarOpen));
+}
+
+function useMobileSidebar() {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    _sidebarListeners.push(setOpen);
+    return () => { _sidebarListeners = _sidebarListeners.filter(fn => fn !== setOpen); };
+  }, []);
+  return open;
+}
+
 export function DashboardSidebar() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { user, isSignedIn } = useUser();
+  const mobileOpen = useMobileSidebar();
 
   const preferredLocation = searchParams.get("location") || "";
   const preferredBhk = searchParams.get("bhk") || "Any BHK";
@@ -44,70 +65,94 @@ export function DashboardSidebar() {
     ? `${preferredBhk} in ${preferredLocation}`
     : "Set location and BHK to personalize matches";
 
+  // Close sidebar on route change (mobile)
+  useEffect(() => {
+    _sidebarOpen = false;
+    _sidebarListeners.forEach(fn => fn(false));
+  }, [pathname]);
+
   return (
-    <aside className="fixed left-0 top-0 h-screen w-[260px] bg-surface border-r border-border-custom flex flex-col z-40">
-      {/* Logo */}
-      <div className="px-6 py-6">
-        <Link href="/" className="flex items-center gap-1">
-          <span className="font-playfair italic text-2xl text-charcoal">griha</span>
-          <span className="font-playfair text-2xl text-warm-gold font-bold">AI</span>
-        </Link>
-      </div>
+    <>
+      {/* Overlay backdrop on mobile */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 bg-black/40 z-40 lg:hidden"
+          onClick={() => toggleMobileSidebar()}
+        />
+      )}
+      <aside className={cn(
+        "fixed left-0 top-0 h-screen w-[260px] bg-surface border-r border-border-custom flex flex-col z-50 transition-transform duration-300",
+        mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+      )}>
+        {/* Logo + Close on mobile */}
+        <div className="px-6 py-6 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-1">
+            <span className="font-playfair italic text-2xl text-charcoal">griha</span>
+            <span className="font-playfair text-2xl text-warm-gold font-bold">AI</span>
+          </Link>
+          <button
+            onClick={() => toggleMobileSidebar()}
+            className="lg:hidden p-1.5 text-muted hover:text-charcoal rounded-lg"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
 
-      {/* User greeting */}
-      <div className="px-6 pb-4 border-b border-border-custom">
-        <p className="text-sm text-muted">Welcome back,</p>
-        <p className="font-dm font-semibold text-charcoal">{isSignedIn ? displayName : "Guest"}</p>
-        <p className="text-xs text-muted mt-1">{preferenceLabel}</p>
-      </div>
+        {/* User greeting */}
+        <div className="px-6 pb-4 border-b border-border-custom">
+          <p className="text-sm text-muted">Welcome back,</p>
+          <p className="font-dm font-semibold text-charcoal">{isSignedIn ? displayName : "Guest"}</p>
+          <p className="text-xs text-muted mt-1">{preferenceLabel}</p>
+        </div>
 
-      {/* Nav links */}
-      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        {NAV_ITEMS.map((item) => {
-          const isActive = pathname === item.href || pathname.startsWith(item.href.split("#")[0] + "/");
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-dm transition-all",
-                isActive
-                  ? "bg-forest/10 text-forest font-semibold"
-                  : "text-muted hover:bg-cream hover:text-charcoal"
-              )}
-            >
-              <item.icon className="w-5 h-5" />
-              <span className="flex-1">{item.label}</span>
-              {item.badge && (
-                <span className="bg-forest text-white text-xs px-2 py-0.5 rounded-full">
-                  {item.badge}
-                </span>
-              )}
-            </Link>
-          );
-        })}
-      </nav>
+        {/* Nav links */}
+        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+          {NAV_ITEMS.map((item) => {
+            const isActive = pathname === item.href || pathname.startsWith(item.href.split("#")[0] + "/");
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-dm transition-all",
+                  isActive
+                    ? "bg-forest/10 text-forest font-semibold"
+                    : "text-muted hover:bg-cream hover:text-charcoal"
+                )}
+              >
+                <item.icon className="w-5 h-5" />
+                <span className="flex-1">{item.label}</span>
+                {item.badge && (
+                  <span className="bg-forest text-white text-xs px-2 py-0.5 rounded-full">
+                    {item.badge}
+                  </span>
+                )}
+              </Link>
+            );
+          })}
+        </nav>
 
-      {/* User section at bottom */}
-      <div className="px-4 py-4 border-t border-border-custom">
-        <SignedIn>
-          <div className="flex items-center gap-3">
-            <UserButton afterSignOutUrl="/sign-in" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-charcoal truncate">{displayName}</p>
-              <p className="text-xs text-warm-gold font-medium">Signed in with Clerk</p>
+        {/* User section at bottom */}
+        <div className="px-4 py-4 border-t border-border-custom">
+          <SignedIn>
+            <div className="flex items-center gap-3">
+              <UserButton afterSignOutUrl="/sign-in" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-charcoal truncate">{displayName}</p>
+                <p className="text-xs text-warm-gold font-medium">Signed in with Clerk</p>
+              </div>
             </div>
-          </div>
-        </SignedIn>
-        <SignedOut>
-          <SignInButton mode="modal">
-            <button className="w-full rounded-xl bg-forest text-white text-sm font-semibold px-3 py-2 hover:bg-forest-light transition-colors">
-              Sign in
-            </button>
-          </SignInButton>
-        </SignedOut>
-      </div>
-    </aside>
+          </SignedIn>
+          <SignedOut>
+            <SignInButton mode="modal">
+              <button className="w-full rounded-xl bg-forest text-white text-sm font-semibold px-3 py-2 hover:bg-forest-light transition-colors">
+                Sign in
+              </button>
+            </SignInButton>
+          </SignedOut>
+        </div>
+      </aside>
+    </>
   );
 }
 
@@ -272,9 +317,17 @@ export function DashboardTopBar({ filters, onApplyFilters }: DashboardTopBarProp
 
   return (
     <div className="sticky top-0 z-30 bg-cream/90 backdrop-blur-md border-b border-border-custom">
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center px-6 py-3 min-h-[72px] gap-4">
+      <div className="flex items-center px-4 lg:px-6 py-3 min-h-[72px] gap-3 lg:gap-4">
+        {/* Mobile hamburger */}
+        <button
+          onClick={() => toggleMobileSidebar()}
+          className="lg:hidden p-2 text-charcoal hover:bg-surface rounded-xl border border-border-custom shrink-0"
+        >
+          <Menu className="w-5 h-5" />
+        </button>
+
         {/* Status indicators */}
-        <div className="flex items-center gap-4 min-w-0">
+        <div className="hidden md:flex items-center gap-4 min-w-0">
           <div className="flex items-center gap-1.5 bg-surface/50 border border-border-custom px-3 py-1.5 rounded-full shrink-0">
             <motion.span
               className="w-2 h-2 rounded-full bg-success"
@@ -295,8 +348,8 @@ export function DashboardTopBar({ filters, onApplyFilters }: DashboardTopBarProp
         <div 
           ref={searchRef}
           className={cn(
-            "relative transition-all duration-300 ease-out z-50",
-            isSearchExpanded ? "w-[500px]" : "w-[300px]"
+            "relative transition-all duration-300 ease-out z-50 flex-1 lg:flex-none",
+            isSearchExpanded ? "lg:w-[500px]" : "lg:w-[300px]"
           )}
         >
           <div 

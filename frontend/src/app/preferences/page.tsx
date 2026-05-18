@@ -126,7 +126,7 @@ export default function PreferencesPage() {
     return (
       <div className="min-h-screen bg-cream">
         <DashboardSidebar />
-        <div className="ml-[260px]">
+        <div className="lg:ml-[260px]">
           <DashboardTopBar />
           <div className="flex items-center justify-center py-20">
             <Loader2 className="w-8 h-8 text-forest animate-spin" />
@@ -139,7 +139,7 @@ export default function PreferencesPage() {
   return (
     <div className="min-h-screen bg-cream">
       <DashboardSidebar />
-      <div className="ml-[260px]">
+      <div className="lg:ml-[260px]">
         <DashboardTopBar />
 
         <div className="p-6 max-w-3xl">

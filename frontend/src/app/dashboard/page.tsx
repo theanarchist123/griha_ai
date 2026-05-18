@@ -418,7 +418,7 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-cream">
       <DashboardSidebar />
 
-      <div className="ml-[260px] mr-[300px]">
+      <div className="lg:ml-[260px] lg:mr-[300px]">
         <DashboardTopBar filters={filters} onApplyFilters={handleApplyFilters} />
 
         <div className="p-6 space-y-8">
@@ -517,7 +517,7 @@ export default function DashboardPage() {
       </div>
 
       {/* AI Activity Feed - Right Panel */}
-      <div className="fixed right-0 top-0 h-screen w-[300px] bg-surface border-l border-border-custom overflow-y-auto">
+      <div className="hidden lg:block fixed right-0 top-0 h-screen w-[300px] bg-surface border-l border-border-custom overflow-y-auto">
         <div className="p-4 border-b border-border-custom">
           <h3 className="font-dm font-bold text-charcoal text-sm">What Griha AI did while you were away</h3>
         </div>

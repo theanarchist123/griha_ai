@@ -5,9 +5,9 @@ import { motion } from "framer-motion";
 import { useUser, SignInButton } from "@clerk/nextjs";
 import Link from "next/link";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
-import { DashboardSidebar } from "@/components/shared/Navbar";
+import { DashboardSidebar, toggleMobileSidebar } from "@/components/shared/Navbar";
 import { formatPrice } from "@/lib/utils";
-import { Loader2, AlertCircle, Building2, Trash2 } from "lucide-react";
+import { Loader2, AlertCircle, Building2, Trash2, Menu } from "lucide-react";
 
 type Stage = "shortlisted" | "underReview" | "negotiating" | "offerMade";
 
@@ -137,11 +137,19 @@ export default function PipelinePage() {
   return (
     <div className="min-h-screen bg-cream flex">
       <DashboardSidebar />
-      <div className="flex-1 ml-[260px] flex flex-col h-screen overflow-hidden">
+      <div className="flex-1 lg:ml-[260px] flex flex-col h-screen overflow-hidden">
         {/* Header */}
-        <header className="bg-cream/90 backdrop-blur-md border-b border-border-custom px-8 py-6 shrink-0 z-10">
-          <h1 className="font-playfair text-3xl text-charcoal">My Pipeline</h1>
-          <p className="text-muted font-dm text-sm mt-1">Track and manage your shortlisted properties</p>
+        <header className="bg-cream/90 backdrop-blur-md border-b border-border-custom px-6 lg:px-8 py-6 shrink-0 z-10 flex items-center gap-4">
+          <button
+            onClick={() => toggleMobileSidebar()}
+            className="lg:hidden p-2 text-charcoal hover:bg-surface rounded-xl border border-border-custom shrink-0"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+          <div>
+            <h1 className="font-playfair text-3xl text-charcoal">My Pipeline</h1>
+            <p className="text-muted font-dm text-sm mt-1">Track and manage your shortlisted properties</p>
+          </div>
         </header>
 
         {/* Content */}

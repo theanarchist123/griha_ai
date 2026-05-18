@@ -70,7 +70,7 @@ export default function ActivityPage() {
   return (
     <div className="min-h-screen bg-cream">
       <DashboardSidebar />
-      <div className="ml-[260px]">
+      <div className="lg:ml-[260px]">
         <DashboardTopBar />
 
         <div className="p-6 max-w-4xl">
