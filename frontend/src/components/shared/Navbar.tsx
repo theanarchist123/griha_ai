@@ -22,14 +22,17 @@ import {
   Loader2,
   Menu,
   X,
+  Shield,
 } from "lucide-react";
 
 const NAV_ITEMS = [
   { label: "My Matches", href: "/dashboard", icon: Home, badge: 8 },
+  { label: "Browse", href: "/browse", icon: Search },
   { label: "Pipeline", href: "/pipeline", icon: BarChart3 },
   { label: "Legal Checks", href: "/legal/prop-1", icon: Scale },
   { label: "Negotiations", href: "/negotiate/prop-1", icon: MessageSquare },
   { label: "Documents", href: "/documents", icon: FileText },
+  { label: "Contract AI", href: "/contract", icon: Shield },
   { label: "Neighbourhood", href: "/neighbourhood/bandra-west", icon: MapPin },
   { label: "Preferences", href: "/preferences", icon: Settings },
 ];

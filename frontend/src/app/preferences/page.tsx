@@ -52,6 +52,10 @@ export default function PreferencesPage() {
       const json = await res.json();
       if (json.status === "success" && json.data) {
         setPrefs(json.data);
+        // Load persisted notification settings if available
+        if (json.data.notification_settings) {
+          setNotifications(prev => ({ ...prev, ...json.data.notification_settings }));
+        }
       }
     } catch {
       // No profile yet
@@ -68,6 +72,7 @@ export default function PreferencesPage() {
     must_haves: string[];
     deal_breakers: string[];
     commute_destination: string;
+    notification_settings: Record<string, boolean>;
   }>) {
     if (!userId) return;
     setSaving(true);
@@ -265,7 +270,12 @@ export default function PreferencesPage() {
                         {key.replace(/([A-Z])/g, " $1").trim()}
                       </span>
                       <button
-                        onClick={() => setNotifications((prev) => ({ ...prev, [key]: !value }))}
+                        onClick={() => {
+                          const next = { ...notifications, [key]: !value };
+                          setNotifications(next as typeof notifications);
+                          // Persist immediately
+                          savePreferences({ notification_settings: next });
+                        }}
                         className={`w-11 h-6 rounded-full transition-colors relative ${
                           value ? "bg-forest" : "bg-sand"
                         }`}
