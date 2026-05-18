@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname } from "next/navigation";
+
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { useState, useRef, useEffect } from "react";
@@ -62,16 +63,20 @@ function useMobileSidebar() {
 
 export function DashboardSidebar() {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const { user, isSignedIn } = useUser();
   const mobileOpen = useMobileSidebar();
 
-  const preferredLocation = searchParams.get("location") || "";
-  const preferredBhk = searchParams.get("bhk") || "Any BHK";
+  // Read search params safely (no useSearchParams → no Suspense requirement)
+  const [preferenceLabel, setPreferenceLabel] = useState("Set location and BHK to personalize matches");
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    const loc = sp.get("location") || "";
+    const bhk = sp.get("bhk") || "Any BHK";
+    setPreferenceLabel(loc ? `${bhk} in ${loc}` : "Set location and BHK to personalize matches");
+  }, [pathname]);
+
   const displayName = user?.fullName || user?.firstName || "Home Seeker";
-  const preferenceLabel = preferredLocation
-    ? `${preferredBhk} in ${preferredLocation}`
-    : "Set location and BHK to personalize matches";
+
 
   // Close sidebar on route change (mobile)
   useEffect(() => {
