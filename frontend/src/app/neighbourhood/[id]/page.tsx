@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, Suspense } from "react";
+
 import { useParams, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import dynamic from "next/dynamic";
@@ -69,6 +70,18 @@ function formatDistance(m?: number) {
 }
 
 export default function NeighbourhoodExplorerPage() {
+  return (
+    <Suspense fallback={
+      <div className="h-screen flex items-center justify-center" style={{ background: "#0f0f1a" }}>
+        <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "#C9922A", borderTopColor: "transparent" }} />
+      </div>
+    }>
+      <NeighbourhoodExplorerInner />
+    </Suspense>
+  );
+}
+
+function NeighbourhoodExplorerInner() {
   const params = useParams();
   const searchParams = useSearchParams();
 

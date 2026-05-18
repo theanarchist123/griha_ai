@@ -4,8 +4,9 @@ import { motion } from "framer-motion";
 import { DashboardSidebar, DashboardTopBar, type DashboardSearchFilters } from "@/components/shared/Navbar";
 import { PropertyCard } from "@/components/shared/PropertyCard";
 import { SkeletonCard } from "@/components/shared/LoadingState";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+
 import { formatPrice } from "@/lib/utils";
 import type { Property } from "@/lib/mockData";
 import { STATIC_IMAGES } from "@/lib/unsplash";
@@ -127,6 +128,18 @@ function deriveTotalFlats(raw: any): number | undefined {
 }
 
 export default function DashboardPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-cream flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-forest border-t-transparent rounded-full animate-spin" />
+      </div>
+    }>
+      <DashboardPageInner />
+    </Suspense>
+  );
+}
+
+function DashboardPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [topMatches, setTopMatches] = useState<Property[]>([]);
