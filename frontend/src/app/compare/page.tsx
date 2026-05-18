@@ -7,10 +7,13 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { ArrowLeft, X, Plus, Loader2, Search } from "lucide-react";
 import { formatPrice } from "@/lib/utils";
 import { STATIC_IMAGES } from "@/lib/unsplash";
+import { useUser, SignInButton } from "@clerk/nextjs";
+import { toast } from "react-hot-toast";
 
 export default function ComparePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { user, isLoaded } = useUser();
   const [properties, setProperties] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [shortlisted, setShortlisted] = useState<Set<string>>(new Set());
@@ -87,13 +90,55 @@ export default function ComparePage() {
     return isLowerBetter ? values.indexOf(Math.min(...values)) : values.indexOf(Math.max(...values));
   };
 
-  const handleShortlist = (id: string) => {
+  const handleShortlist = async (id: string) => {
+    if (!user) {
+      toast?.error?.("Please sign in to shortlist") || alert("Please sign in to shortlist");
+      return;
+    }
+
+    const isAlreadyShortlisted = shortlisted.has(id);
+    
+    // Optimistic UI update
     setShortlisted(prev => {
       const newSet = new Set(prev);
-      if (newSet.has(id)) newSet.delete(id);
+      if (isAlreadyShortlisted) newSet.delete(id);
       else newSet.add(id);
       return newSet;
     });
+
+    try {
+      if (isAlreadyShortlisted) {
+        // Find entry id to delete? Compare page doesn't have entry_id easily. 
+        // For simplicity, we just won't support removing from compare page, or we refactor to use a full check.
+        // For now, if it's already shortlisted, just ignore removal for now (or show toast)
+        toast.error("Removing from shortlist via compare is not supported yet. Please use Pipeline page.");
+        setShortlisted(prev => {
+          const newSet = new Set(prev);
+          newSet.add(id);
+          return newSet;
+        });
+        return;
+      }
+
+      const res = await fetch(`${(process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "")}/api/pipeline/save?clerk_id=${user.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ property_id: id, stage: "shortlisted" }),
+      });
+      const data = await res.json();
+      if (data.status === "success") {
+        toast?.success?.("Saved to pipeline!") || alert("Saved to pipeline!");
+      }
+    } catch (e) {
+      console.error(e);
+      toast?.error?.("Failed to save") || alert("Failed to save");
+      // Revert optimistic update
+      setShortlisted(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(id);
+        return newSet;
+      });
+    }
   };
 
   const fetchAllProperties = async () => {
@@ -192,17 +237,17 @@ export default function ComparePage() {
     return (
       <div className="min-h-screen bg-cream">
         <div className="sticky top-0 z-30 bg-cream/80 backdrop-blur-md border-b border-border-custom px-6 py-3">
-          <button onClick={() => router.back()} className="flex items-center gap-2 text-muted hover:text-charcoal transition-colors">
+          <Link href="/dashboard" className="flex items-center gap-2 text-muted hover:text-charcoal transition-colors">
             <ArrowLeft className="w-5 h-5" />
             <span className="text-sm font-dm">Back to Dashboard</span>
-          </button>
+          </Link>
         </div>
         <div className="max-w-2xl mx-auto px-6 py-20 text-center">
           <h1 className="font-playfair text-3xl font-bold text-charcoal mb-4">No Properties Selected</h1>
           <p className="text-muted font-dm mb-8">Select at least two properties from your dashboard to compare them.</p>
-          <button onClick={() => router.back()} className="px-6 py-3 bg-forest text-white rounded-xl font-dm font-semibold hover:bg-forest-light transition-colors">
+          <Link href="/dashboard" className="px-6 py-3 inline-block bg-forest text-white rounded-xl font-dm font-semibold hover:bg-forest-light transition-colors">
             Browse Properties
-          </button>
+          </Link>
         </div>
       </div>
     );
@@ -213,10 +258,10 @@ export default function ComparePage() {
       {/* Top bar */}
       <div className="sticky top-0 z-30 bg-cream/80 backdrop-blur-md border-b border-border-custom px-6 py-3">
         <div className="flex items-center justify-between">
-          <button onClick={() => router.back()} className="flex items-center gap-2 text-muted hover:text-charcoal transition-colors">
+          <Link href="/dashboard" className="flex items-center gap-2 text-muted hover:text-charcoal transition-colors">
             <ArrowLeft className="w-5 h-5" />
             <span className="text-sm font-dm">Back to Dashboard</span>
-          </button>
+          </Link>
           <h1 className="font-playfair text-xl text-charcoal">Compare Properties</h1>
           <div className="w-24" />
         </div>
@@ -304,16 +349,24 @@ export default function ComparePage() {
                   >
                     Negotiate
                   </Link>
-                  <button 
-                    onClick={() => handleShortlist(prop.id)}
-                    className={`py-2.5 border text-center rounded-xl font-dm font-semibold text-sm transition-colors ${
-                      shortlisted.has(prop.id)
-                        ? "border-forest bg-forest/10 text-forest"
-                        : "border-forest text-forest hover:bg-forest/5"
-                    }`}
-                  >
-                    {shortlisted.has(prop.id) ? "✓ Shortlisted" : "Shortlist"}
-                  </button>
+                  {!isLoaded ? null : user ? (
+                    <button 
+                      onClick={() => handleShortlist(prop.id)}
+                      className={`py-2.5 border text-center rounded-xl font-dm font-semibold text-sm transition-colors ${
+                        shortlisted.has(prop.id)
+                          ? "border-forest bg-forest/10 text-forest"
+                          : "border-forest text-forest hover:bg-forest/5"
+                      }`}
+                    >
+                      {shortlisted.has(prop.id) ? "✓ Shortlisted" : "Shortlist"}
+                    </button>
+                  ) : (
+                    <SignInButton mode="modal">
+                      <button className="py-2.5 border border-border-custom text-charcoal text-center rounded-xl font-dm font-semibold text-sm hover:border-forest/50 transition-colors">
+                        Sign in to Shortlist
+                      </button>
+                    </SignInButton>
+                  )}
                 </div>
               ))}
               {properties.length < 4 && <span />}

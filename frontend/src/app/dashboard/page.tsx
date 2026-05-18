@@ -426,12 +426,14 @@ export default function DashboardPage() {
           <section>
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-playfair text-2xl text-charcoal">Today&apos;s Top Matches</h2>
-              <Link
-                href={`/compare?ids=${topMatches.slice(0, 3).map((p) => p.id).join(",")}`}
-                className="text-sm text-forest font-dm hover:underline flex items-center gap-1"
-              >
-                Compare All <ArrowRight className="w-4 h-4" />
-              </Link>
+              {topMatches.length >= 2 && (
+                <Link
+                  href={`/compare?ids=${topMatches.slice(0, 3).map((p) => p.id).join(",")}`}
+                  className="text-sm text-forest font-dm hover:underline flex items-center gap-1"
+                >
+                  Compare All <ArrowRight className="w-4 h-4" />
+                </Link>
+              )}
             </div>
             {!loading && searchNotice && (
               <div className="mb-3 rounded-lg border border-warm-gold/30 bg-warm-gold/10 px-3 py-2 text-xs font-dm text-charcoal">
@@ -511,62 +513,6 @@ export default function DashboardPage() {
               ))}
             </div>
           </section>
-
-          {/* Pipeline Kanban */}
-          <section id="pipeline">
-            <h2 className="font-playfair text-2xl text-charcoal mb-4">Pipeline</h2>
-            {!loading && pipelineData && (
-              <div className="overflow-x-auto pb-4 -mx-2 px-2 scrollbar-thin">
-                <div className="flex gap-4 min-w-[1000px] lg:grid lg:grid-cols-4 lg:min-w-0">
-                {PIPELINE_COLUMNS.map((col) => {
-                  const items = pipelineData[col.key] || [];
-                  return (
-                    <div key={col.key} className="bg-surface rounded-xl border border-border-custom p-4">
-                      <div className="flex items-center gap-2 mb-4">
-                        <div className={`w-2.5 h-2.5 rounded-full ${col.color}`} />
-                        <h3 className="font-dm font-semibold text-charcoal text-sm">{col.label}</h3>
-                        <span className="ml-auto text-xs bg-cream px-2 py-0.5 rounded-full text-muted">
-                          {items.length}
-                        </span>
-                      </div>
-                      <div className="space-y-3">
-                        {items.length === 0 && (
-                          <div className="text-center py-4 text-xs font-dm text-muted">No items</div>
-                        )}
-                        {items.map((prop: any) => (
-                          <Link
-                            key={prop.id || prop._id}
-                            href={`/property/${prop.id || prop._id}`}
-                            className="block bg-cream rounded-lg p-3 hover:shadow-md transition-shadow"
-                          >
-                            <div className="flex gap-3">
-                              <img
-                                src={prop.images?.[0] || ""}
-                                alt={prop.address || "Property"}
-                                className="w-14 h-14 rounded-lg object-cover shrink-0"
-                              />
-                              <div className="min-w-0">
-                                <p className="font-dm font-semibold text-charcoal text-xs truncate">
-                                  {prop.bhk}, {prop.locality}
-                                </p>
-                                <p className="text-forest font-bold text-sm mt-0.5">
-                                  {formatPrice(prop.price)}/mo
-                                </p>
-                                <p className="text-muted text-[10px] mt-1 truncate italic">
-                                  {prop.aiInsight ? prop.aiInsight.slice(0, 50) + "..." : ""}
-                                </p>
-                              </div>
-                            </div>
-                          </Link>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </section>
         </div>
       </div>
 

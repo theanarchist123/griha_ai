@@ -24,7 +24,7 @@ import {
 
 const NAV_ITEMS = [
   { label: "My Matches", href: "/dashboard", icon: Home, badge: 8 },
-  { label: "Pipeline", href: "/dashboard#pipeline", icon: BarChart3 },
+  { label: "Pipeline", href: "/pipeline", icon: BarChart3 },
   { label: "Legal Checks", href: "/legal/prop-1", icon: Scale },
   { label: "Negotiations", href: "/negotiate/prop-1", icon: MessageSquare },
   { label: "Documents", href: "/documents", icon: FileText },

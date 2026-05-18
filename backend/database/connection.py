@@ -13,6 +13,7 @@ from database.models.document import DocumentModel
 from database.models.neighbourhood_report import NeighbourhoodReport
 from database.models.rag_models import LegalCorpus, NeighbourhoodReview
 from database.models.activity_log import ActivityLog
+from database.models.pipeline import PipelineEntry
 
 async def init_db():
     # Create Motor client
@@ -33,6 +34,7 @@ async def init_db():
             LegalCorpus,
             NeighbourhoodReview,
             ActivityLog,
+            PipelineEntry,
         ]
     )
     

@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from . import locations, search, auth, properties, scrape, negotiation, documents, legal, neighbourhood, neighbourhood_ai, preferences, activity
+from . import locations, search, auth, properties, scrape, negotiation, documents, legal, neighbourhood, neighbourhood_ai, preferences, activity, pipeline
 
 router = APIRouter()
 router.include_router(locations.router)
@@ -14,5 +14,6 @@ router.include_router(neighbourhood.router)
 router.include_router(neighbourhood_ai.router)
 router.include_router(preferences.router)
 router.include_router(activity.router)
+router.include_router(pipeline.router)
 
 # We will export the combined router to main.py

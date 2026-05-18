@@ -19,6 +19,8 @@ import {
 import type { Property } from "@/lib/mockData";
 import { formatPrice } from "@/lib/utils";
 import { STATIC_IMAGES } from "@/lib/unsplash";
+import { useUser, SignInButton } from "@clerk/nextjs";
+import { toast } from "react-hot-toast";
 
 function parseId(value: unknown): string | null {
   if (typeof value === "string") return value;
@@ -205,6 +207,44 @@ export default function PropertyDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedImage, setSelectedImage] = useState(0);
+
+  const { user, isLoaded } = useUser();
+  const [savedStage, setSavedStage] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (isLoaded && user && propertyId) {
+      fetch(`${(process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "")}/api/pipeline/check/${propertyId}?clerk_id=${user.id}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.saved) setSavedStage(data.stage);
+        })
+        .catch(console.error);
+    }
+  }, [isLoaded, user, propertyId]);
+
+  const handleSaveToPipeline = async () => {
+    if (!user) return;
+    setIsSaving(true);
+    try {
+      const targetStage = savedStage ? savedStage : "shortlisted";
+      const res = await fetch(`${(process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "")}/api/pipeline/save?clerk_id=${user.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ property_id: propertyId, stage: targetStage }),
+      });
+      const data = await res.json();
+      if (data.status === "success") {
+        setSavedStage(targetStage);
+        toast?.success?.("Saved to pipeline!") || alert("Saved to pipeline!");
+      }
+    } catch (e) {
+      console.error(e);
+      toast?.error?.("Failed to save") || alert("Failed to save");
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -404,19 +444,41 @@ export default function PropertyDetailPage() {
               )}
             </div>
 
-            <div className="flex gap-3 pt-4 border-t border-border-custom mt-2">
-              <Link 
-                href={`/legal/${propertyId}`} 
-                className="flex-1 text-center bg-forest text-white py-3 rounded-xl font-dm font-semibold hover:bg-forest-light transition-colors"
-              >
-                Verify Legal Docs
-              </Link>
-              <Link 
-                href={`/negotiate/${propertyId}`} 
-                className="flex-1 text-center border-2 border-forest text-forest py-3 rounded-xl font-dm font-semibold hover:bg-forest/5 transition-colors"
-              >
-                Negotiate
-              </Link>
+            <div className="flex flex-col gap-3 pt-4 border-t border-border-custom mt-2">
+              <div className="flex gap-3">
+                <Link 
+                  href={`/legal/${propertyId}`} 
+                  className="flex-1 text-center bg-forest text-white py-3 rounded-xl font-dm font-semibold hover:bg-forest-light transition-colors"
+                >
+                  Verify Legal Docs
+                </Link>
+                <Link 
+                  href={`/negotiate/${propertyId}`} 
+                  className="flex-1 text-center border-2 border-forest text-forest py-3 rounded-xl font-dm font-semibold hover:bg-forest/5 transition-colors"
+                >
+                  Negotiate
+                </Link>
+              </div>
+              
+              {!isLoaded ? null : user ? (
+                <button
+                  onClick={handleSaveToPipeline}
+                  disabled={isSaving}
+                  className={`w-full py-3 rounded-xl font-dm font-semibold transition-colors border-2 ${
+                    savedStage
+                      ? "border-forest bg-forest/10 text-forest"
+                      : "border-border-custom text-charcoal hover:border-forest/50"
+                  }`}
+                >
+                  {isSaving ? "Saving..." : savedStage ? "✓ Saved to Pipeline" : "Save to Pipeline"}
+                </button>
+              ) : (
+                <SignInButton mode="modal">
+                  <button className="w-full py-3 border-2 border-border-custom text-charcoal rounded-xl font-dm font-semibold hover:border-forest/50 transition-colors">
+                    Sign in to Save
+                  </button>
+                </SignInButton>
+              )}
             </div>
           </div>
         </div>

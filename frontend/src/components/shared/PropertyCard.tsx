@@ -3,8 +3,11 @@
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { cn, formatPrice } from "@/lib/utils";
-import { MapPin, Maximize2, Building2, AlertTriangle } from "lucide-react";
+import { MapPin, Maximize2, Building2, AlertTriangle, Bookmark, BookmarkCheck } from "lucide-react";
 import type { Property } from "@/lib/mockData";
+import { useUser, SignInButton } from "@clerk/nextjs";
+import { useState, useEffect } from "react";
+import { toast } from "react-hot-toast";
 
 interface PropertyCardProps {
   property: Property;
@@ -19,6 +22,46 @@ export function PropertyCard({ property, className }: PropertyCardProps) {
   };
   const cardTitle = cleanName(property.apartmentName) || cleanName(property.title) || `${property.bhk} in ${property.locality}`;
   const cardInsight = (property.aiInsight || `${property.bhk} listing in ${property.locality}.`).replace(/\.{3,}\s*$/, ".").trim();
+
+  const { user, isLoaded } = useUser();
+  const [isSaved, setIsSaved] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (isLoaded && user && property.id) {
+      fetch(`${(process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "")}/api/pipeline/check/${property.id}?clerk_id=${user.id}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.saved) setIsSaved(true);
+        })
+        .catch(console.error);
+    }
+  }, [isLoaded, user, property.id]);
+
+  const handleSave = async (e: React.MouseEvent) => {
+    e.preventDefault(); // Prevent navigating to detail page
+    e.stopPropagation();
+    if (!user) return;
+    
+    setIsSaving(true);
+    try {
+      const res = await fetch(`${(process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "")}/api/pipeline/save?clerk_id=${user.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ property_id: property.id, stage: "shortlisted" }),
+      });
+      const data = await res.json();
+      if (data.status === "success") {
+        setIsSaved(true);
+        toast?.success?.("Saved to pipeline!") || alert("Saved to pipeline!");
+      }
+    } catch (err) {
+      console.error(err);
+      toast?.error?.("Failed to save") || alert("Failed to save");
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   return (
     <motion.div
@@ -39,13 +82,36 @@ export function PropertyCard({ property, className }: PropertyCardProps) {
             alt={property.address}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
           />
+          {/* Save Button */}
+          {isLoaded && (
+            user ? (
+              <button 
+                onClick={handleSave}
+                disabled={isSaving}
+                className="absolute top-3 left-3 p-2 bg-surface/90 backdrop-blur-sm rounded-full text-charcoal hover:text-forest transition-colors shadow-sm z-10"
+                title={isSaved ? "Saved" : "Save to Pipeline"}
+              >
+                {isSaved ? <BookmarkCheck className="w-4 h-4 text-forest" /> : <Bookmark className="w-4 h-4" />}
+              </button>
+            ) : (
+              <SignInButton mode="modal">
+                <button 
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                  className="absolute top-3 left-3 p-2 bg-surface/90 backdrop-blur-sm rounded-full text-charcoal hover:text-forest transition-colors shadow-sm z-10"
+                  title="Sign in to save"
+                >
+                  <Bookmark className="w-4 h-4" />
+                </button>
+              </SignInButton>
+            )
+          )}
           {/* Match Score Badge */}
-          <div className="absolute top-3 right-3 bg-forest text-white text-sm font-bold px-3 py-1.5 rounded-full">
+          <div className="absolute top-3 right-3 bg-forest text-white text-sm font-bold px-3 py-1.5 rounded-full z-10">
             {property.matchScore}% Match
           </div>
           {/* Red Flag Badge */}
           {property.photoRedFlags.length > 0 && (
-            <div className="absolute top-3 left-3 bg-warm-gold text-white text-xs font-semibold px-2.5 py-1 rounded-full flex items-center gap-1">
+            <div className="absolute bottom-3 left-3 bg-warm-gold text-white text-xs font-semibold px-2.5 py-1 rounded-full flex items-center gap-1 z-10">
               <AlertTriangle className="w-3 h-3" />
               {property.photoRedFlags.length} Flag{property.photoRedFlags.length > 1 ? "s" : ""}
             </div>
