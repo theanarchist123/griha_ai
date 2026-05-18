@@ -100,40 +100,59 @@ async def search_properties(
     location_clause = _build_location_clause(location)
     if location_clause:
         conditions.append(location_clause)
-    base_conditions = list(conditions)
+    base_conditions = list(conditions)  # before BHK + amenity filters
 
     requested_bhk = bhk if bhk and bhk != "Any BHK" else None
     if bhk and bhk != "Any BHK":
         conditions.append({"bhk": {"$regex": bhk.split()[0], "$options": "i"}})
 
+    # Amenity matching: broad OR across amenities array + description + title
+    # Many scraped docs store amenities as "Gated Community", "Covered Parking" etc.
+    def _amenity_clause(keyword: str, aliases: list[str]) -> dict:
+        patterns = [keyword] + aliases
+        or_conds = []
+        for pat in patterns:
+            or_conds.append({"amenities": {"$elemMatch": {"$regex": pat, "$options": "i"}}})
+            or_conds.append({"description": {"$regex": pat, "$options": "i"}})
+            or_conds.append({"title": {"$regex": pat, "$options": "i"}})
+        return {"$or": or_conds}
+
+    amenity_conditions = []
     if gated:
-        conditions.append({"amenities": {"$elemMatch": {"$regex": "gated", "$options": "i"}}})
+        amenity_conditions.append(_amenity_clause("gated", ["gated community", "secured", "society"]))
     if pet:
-        conditions.append({"amenities": {"$elemMatch": {"$regex": "pet", "$options": "i"}}})
+        amenity_conditions.append(_amenity_clause("pet", ["pet friendly", "pets allowed", "dog"]))
     if parking:
-        conditions.append({"amenities": {"$elemMatch": {"$regex": "parking", "$options": "i"}}})
+        amenity_conditions.append(_amenity_clause("parking", ["car park", "covered parking", "garage", "stilt"]))
 
-    query = {}
-    if len(conditions) == 1:
-        query = conditions[0]
-    elif len(conditions) > 1:
-        query = {"$and": conditions}
+    conditions_with_amenities = conditions + amenity_conditions
 
-    search_query = Property.find(query).sort("-_id")
+    def _build_query(conds: list) -> dict:
+        if len(conds) == 1:
+            return conds[0]
+        return {"$and": conds} if conds else {}
 
-    results = await search_query.to_list()
+    query = _build_query(conditions_with_amenities)
+    results = await Property.find(query).sort("-_id").to_list()
 
     fallback_applied = False
-    # If no exact BHK inventory exists for the location, gracefully fallback
-    # to location-level results so users still see available listings.
+    # Fallback 1: no BHK match in location — drop BHK constraint
     if requested_bhk and not results:
-        fallback_query = {}
-        if len(base_conditions) == 1:
-            fallback_query = base_conditions[0]
-        elif len(base_conditions) > 1:
-            fallback_query = {"$and": base_conditions}
+        query = _build_query(base_conditions + amenity_conditions)
+        results = await Property.find(query).sort("-_id").to_list()
+        fallback_applied = True
 
-        results = await Property.find(fallback_query).sort("-_id").to_list()
+    # Fallback 2: amenity filter returned nothing — drop amenity constraint
+    # (amenities data is often missing on scraped properties)
+    if amenity_conditions and not results:
+        query = _build_query(conditions)
+        results = await Property.find(query).sort("-_id").to_list()
+        fallback_applied = True
+
+    # Fallback 3: BHK + amenity both failed — bare location only
+    if requested_bhk and not results:
+        query = _build_query(base_conditions)
+        results = await Property.find(query).sort("-_id").to_list()
         fallback_applied = True
 
     await _enrich_missing_card_content(results)

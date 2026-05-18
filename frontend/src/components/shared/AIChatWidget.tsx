@@ -175,14 +175,27 @@ export function AIChatWidget() {
       if (params.location) searchParams.set("location", params.location);
       if (params.bhk) searchParams.set("bhk", params.bhk);
       if (params.max_price) searchParams.set("max_price", params.max_price);
-      searchParams.set("limit", "5");
+      // Amenity flags — sent to /search endpoint which handles them
+      const hasAmenities = params.pet === "true" || params.parking === "true" || params.gated === "true";
+      if (params.gated === "true") searchParams.set("gated", "true");
+      if (params.pet === "true") searchParams.set("pet", "true");
+      if (params.parking === "true") searchParams.set("parking", "true");
 
       const apiBase = (process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
-      const res = await fetch(`${apiBase}/api/properties/?${searchParams.toString()}`);
+      // Use /search endpoint (amenity-aware) if any filter set; /? (list) for bare browse
+      const useSearchEndpoint = hasAmenities || params.gated || params.pet || params.parking;
+      const endpoint = useSearchEndpoint
+        ? `${apiBase}/api/properties/search?${searchParams.toString()}`
+        : `${apiBase}/api/properties/?${searchParams.toString()}`;
+
+      const res = await fetch(endpoint);
       const json = await res.json();
 
-      if (json.status === "success" && Array.isArray(json.data) && json.data.length > 0) {
-        const properties = json.data.slice(0, 4).map((p: any) => ({
+      // /search returns {results:[]} while / returns {data:[]}
+      const rawList = Array.isArray(json.results) ? json.results : Array.isArray(json.data) ? json.data : [];
+
+      if (json.status === "success" && rawList.length > 0) {
+        const properties = rawList.slice(0, 4).map((p: any) => ({
           id: p.id || p._id?.$oid || p._id,
           bhk: p.bhk || "N/A",
           locality: p.locality || p.city || "Unknown",
@@ -190,14 +203,21 @@ export function AIChatWidget() {
           images: Array.isArray(p.images) && p.images.length > 0 ? p.images : [],
         }));
 
+
         const locationLabel = params.location || "your search area";
         const bhkLabel = params.bhk || "homes";
         const priceLabel = params.max_price ? ` under ${formatPrice(parseInt(params.max_price))}` : "";
+        const amenityLabels = [
+          params.gated === "true" && "gated",
+          params.pet === "true" && "pet-friendly",
+          params.parking === "true" && "with parking",
+        ].filter(Boolean).join(", ");
+        const amenityLabel = amenityLabels ? ` (${amenityLabels})` : "";
 
         const aiMsg: ChatMessage = {
           id: `ai-${Date.now()}`,
           role: "assistant",
-          content: `Found ${json.data.length} ${bhkLabel} in ${locationLabel}${priceLabel}. Here are the top picks:`,
+          content: `Found ${rawList.length} ${bhkLabel} in ${locationLabel}${priceLabel}${amenityLabel}. Here are the top picks:`,
           properties,
           timestamp: new Date(),
         };
