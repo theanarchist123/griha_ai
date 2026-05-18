@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft,
   Building2,
@@ -15,12 +15,22 @@ import {
   Sofa,
   Sparkles,
   TrendingUp,
+  Share2,
+  Copy,
+  X,
+  ChevronLeft,
+  ChevronRight,
+  MapPinned,
+  Calendar,
+  Phone,
+  MessageCircle,
 } from "lucide-react";
 import type { Property } from "@/lib/mockData";
 import { formatPrice } from "@/lib/utils";
 import { STATIC_IMAGES } from "@/lib/unsplash";
 import { useUser, SignInButton } from "@clerk/nextjs";
 import { toast } from "react-hot-toast";
+import { PropertyCard } from "@/components/shared/PropertyCard";
 
 function parseId(value: unknown): string | null {
   if (typeof value === "string") return value;
@@ -207,6 +217,8 @@ export default function PropertyDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedImage, setSelectedImage] = useState(0);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [similarProperties, setSimilarProperties] = useState<Property[]>([]);
 
   const { user, isLoaded } = useUser();
   const [savedStage, setSavedStage] = useState<string | null>(null);
@@ -279,6 +291,56 @@ export default function PropertyDetailPage() {
     };
   }, [propertyId]);
 
+  // Fetch similar properties once main property is loaded
+  useEffect(() => {
+    if (!property) return;
+    (async () => {
+      try {
+        const res = await fetch(
+          `${(process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "")}/api/properties/?locality=${encodeURIComponent(property.locality)}&bhk=${encodeURIComponent(property.bhk)}&limit=6`
+        );
+        const json = await res.json();
+        if (json.status === "success" && Array.isArray(json.data)) {
+          const similar = json.data
+            .map((r: any) => normalizeProperty(r))
+            .filter((p: Property) => p.id !== propertyId)
+            .slice(0, 4);
+          setSimilarProperties(similar);
+        }
+      } catch {
+        // Non-critical — just don't show similar section
+      }
+    })();
+  }, [property, propertyId]);
+
+  // Share helpers
+  const shareUrl = typeof window !== "undefined" ? window.location.href : "";
+  const shareText = property ? `Check out this ${property.bhk} in ${property.locality} at ${formatPrice(property.price)}/mo on Griha AI` : "";
+
+  const handleCopyLink = useCallback(() => {
+    navigator.clipboard.writeText(shareUrl).then(() => {
+      toast.success("Link copied!");
+    }).catch(() => {
+      toast.error("Failed to copy");
+    });
+  }, [shareUrl]);
+
+  const handleWhatsAppShare = useCallback(() => {
+    window.open(`https://wa.me/?text=${encodeURIComponent(shareText + "\n" + shareUrl)}`, "_blank");
+  }, [shareText, shareUrl]);
+
+  // Lightbox keyboard navigation
+  useEffect(() => {
+    if (!lightboxOpen || !property) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setLightboxOpen(false);
+      if (e.key === "ArrowRight") setSelectedImage(i => Math.min(i + 1, property.images.length - 1));
+      if (e.key === "ArrowLeft") setSelectedImage(i => Math.max(i - 1, 0));
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [lightboxOpen, property]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-cream p-6">
@@ -317,11 +379,27 @@ export default function PropertyDetailPage() {
   return (
     <div className="min-h-screen bg-cream">
       <div className="sticky top-0 z-30 bg-cream/90 backdrop-blur-md border-b border-border-custom px-6 py-3">
-        <div className="max-w-7xl mx-auto flex items-center gap-4">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
           <Link href="/dashboard" className="inline-flex items-center gap-2 text-sm text-muted hover:text-charcoal transition-colors">
             <ArrowLeft className="w-4 h-4" />
             Back to matches
           </Link>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleCopyLink}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-dm font-semibold text-charcoal bg-surface border border-border-custom rounded-lg hover:border-forest/40 transition-colors"
+              title="Copy link"
+            >
+              <Copy className="w-3.5 h-3.5" /> Copy Link
+            </button>
+            <button
+              onClick={handleWhatsAppShare}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-dm font-semibold text-white bg-[#25D366] rounded-lg hover:bg-[#20BD5A] transition-colors"
+              title="Share on WhatsApp"
+            >
+              <MessageCircle className="w-3.5 h-3.5" /> WhatsApp
+            </button>
+          </div>
         </div>
       </div>
 
@@ -329,12 +407,17 @@ export default function PropertyDetailPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Image Gallery */}
           <div className="lg:col-span-2 space-y-3">
-            <div className="rounded-2xl overflow-hidden border border-border-custom bg-surface">
+            <div className="rounded-2xl overflow-hidden border border-border-custom bg-surface cursor-pointer relative group" onClick={() => setLightboxOpen(true)}>
               <img
                 src={property.images[selectedImage] || property.images[0] || STATIC_IMAGES.apartment1}
                 alt={heading}
                 className="w-full h-[420px] object-cover"
               />
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+                <span className="opacity-0 group-hover:opacity-100 transition-opacity text-white bg-charcoal/60 backdrop-blur-sm px-4 py-2 rounded-full text-sm font-dm font-semibold">
+                  Click to expand
+                </span>
+              </div>
             </div>
             {/* Thumbnail strip */}
             {property.images.length > 1 && (
@@ -479,6 +562,13 @@ export default function PropertyDetailPage() {
                   </button>
                 </SignInButton>
               )}
+
+              <Link
+                href={`/neighbourhood/${property.locality.toLowerCase().replace(/\s+/g, '-')}`}
+                className="w-full text-center py-2.5 rounded-xl font-dm font-semibold text-sm text-muted border border-border-custom hover:border-forest/40 hover:text-forest transition-colors flex items-center justify-center gap-2"
+              >
+                <MapPinned className="w-4 h-4" /> Neighbourhood Report
+              </Link>
             </div>
           </div>
         </div>
@@ -557,7 +647,135 @@ export default function PropertyDetailPage() {
             </section>
           </div>
         </div>
+
+        {/* Schedule Visit / Contact CTA */}
+        <motion.section
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-surface rounded-2xl border border-border-custom p-6"
+        >
+          <h2 className="font-playfair text-2xl text-charcoal mb-4">Interested in this property?</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <button
+              onClick={() => {
+                const msg = `Hi, I'm interested in the ${property.bhk} listing at ${property.locality}, ${property.city} priced at ${formatPrice(property.price)}/mo. Can I schedule a site visit?`;
+                window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+              }}
+              className="flex items-center justify-center gap-2 py-4 bg-[#25D366] text-white rounded-xl font-dm font-semibold hover:bg-[#20BD5A] transition-colors"
+            >
+              <MessageCircle className="w-5 h-5" /> WhatsApp Enquiry
+            </button>
+            <button
+              onClick={() => toast.success('Visit request sent! The owner/agent will contact you shortly.')}
+              className="flex items-center justify-center gap-2 py-4 bg-forest text-white rounded-xl font-dm font-semibold hover:bg-forest-light transition-colors"
+            >
+              <Calendar className="w-5 h-5" /> Schedule Visit
+            </button>
+            <button
+              onClick={() => toast.success('Call request noted! Agent will call you within 30 minutes.')}
+              className="flex items-center justify-center gap-2 py-4 border-2 border-forest text-forest rounded-xl font-dm font-semibold hover:bg-forest/5 transition-colors"
+            >
+              <Phone className="w-5 h-5" /> Request Callback
+            </button>
+          </div>
+        </motion.section>
+
+        {/* Similar Properties */}
+        {similarProperties.length > 0 && (
+          <motion.section
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="pb-8"
+          >
+            <h2 className="font-playfair text-2xl text-charcoal mb-4">Similar Properties Nearby</h2>
+            <div className="flex gap-5 overflow-x-auto pb-4 scrollbar-thin snap-x snap-mandatory -mx-2 px-2">
+              {similarProperties.map((sp, i) => (
+                <motion.div
+                  key={sp.id}
+                  initial={{ opacity: 0, x: 40 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.1 }}
+                  className="shrink-0 snap-start"
+                >
+                  <PropertyCard property={sp} />
+                </motion.div>
+              ))}
+            </div>
+          </motion.section>
+        )}
       </div>
+
+      {/* Fullscreen Lightbox */}
+      <AnimatePresence>
+        {lightboxOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center"
+            onClick={() => setLightboxOpen(false)}
+          >
+            <button
+              onClick={() => setLightboxOpen(false)}
+              className="absolute top-6 right-6 p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors z-10"
+            >
+              <X className="w-6 h-6" />
+            </button>
+
+            {/* Counter */}
+            <div className="absolute top-6 left-6 text-white/60 text-sm font-dm">
+              {selectedImage + 1} / {property.images.length}
+            </div>
+
+            {/* Prev/Next */}
+            {selectedImage > 0 && (
+              <button
+                onClick={(e) => { e.stopPropagation(); setSelectedImage(i => i - 1); }}
+                className="absolute left-4 top-1/2 -translate-y-1/2 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors"
+              >
+                <ChevronLeft className="w-6 h-6" />
+              </button>
+            )}
+            {selectedImage < property.images.length - 1 && (
+              <button
+                onClick={(e) => { e.stopPropagation(); setSelectedImage(i => i + 1); }}
+                className="absolute right-4 top-1/2 -translate-y-1/2 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors"
+              >
+                <ChevronRight className="w-6 h-6" />
+              </button>
+            )}
+
+            {/* Image */}
+            <motion.img
+              key={selectedImage}
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0 }}
+              src={property.images[selectedImage]}
+              alt={`${heading} - ${selectedImage + 1}`}
+              className="max-h-[85vh] max-w-[90vw] object-contain rounded-lg"
+              onClick={(e) => e.stopPropagation()}
+            />
+
+            {/* Thumbnail strip */}
+            {property.images.length > 1 && (
+              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-2">
+                {property.images.map((img, idx) => (
+                  <button
+                    key={`lb-thumb-${idx}`}
+                    onClick={(e) => { e.stopPropagation(); setSelectedImage(idx); }}
+                    className={`shrink-0 rounded-lg overflow-hidden border-2 transition-all ${
+                      idx === selectedImage ? "border-white shadow-lg" : "border-white/30 opacity-60 hover:opacity-90"
+                    }`}
+                  >
+                    <img src={img} alt="" className="w-16 h-12 object-cover" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

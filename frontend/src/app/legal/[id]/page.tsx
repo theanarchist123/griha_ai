@@ -213,7 +213,33 @@ export default function LegalReportPage() {
             It does not constitute legal advice. We recommend consulting a property lawyer before finalizing any transaction.
           </p>
           <div className="flex gap-3">
-            <button className="inline-flex items-center gap-2 px-6 py-3 bg-forest text-white rounded-xl font-dm font-semibold hover:bg-forest-light transition-colors">
+            <button
+              onClick={() => {
+                const lines = [
+                  `LEGAL REPORT — ${report.property.bhk}, ${report.property.locality}, ${report.property.city}`,
+                  `Generated: ${report.generated_at ? new Date(report.generated_at).toLocaleDateString() : "N/A"}`,
+                  `Overall Risk: ${report.overall_risk.toUpperCase()}`,
+                  `Summary: ${report.summary}`,
+                  "",
+                  `RERA: ${report.rera.status} — ${report.rera.number || "N/A"} (${report.rera.complaints} complaints)`,
+                  `Encumbrance: ${report.encumbrance.status} — ${report.encumbrance.details}`,
+                  `Property Tax: ${report.property_tax.status} — ${report.property_tax.details}`,
+                  `Builder: ${report.builder_track_record.status} — ${report.builder_track_record.details}`,
+                  "",
+                  "Disclaimer: This report is AI-generated and does not constitute legal advice.",
+                ];
+                const blob = new Blob([lines.join("\n")], { type: "text/plain" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `legal-report-${report.property.locality.replace(/\s+/g, "-")}.txt`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+              }}
+              className="inline-flex items-center gap-2 px-6 py-3 bg-forest text-white rounded-xl font-dm font-semibold hover:bg-forest-light transition-colors"
+            >
               <Download className="w-4 h-4" /> Download Report
             </button>
             <Link

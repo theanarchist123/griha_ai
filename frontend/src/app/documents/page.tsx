@@ -248,10 +248,34 @@ export default function DocumentsPage() {
                         </div>
                       </div>
                       <div className="flex gap-2 mt-3 pt-3 border-t border-border-custom">
-                        <button className="flex items-center gap-1 text-xs text-forest font-dm font-semibold hover:underline">
+                        <button
+                          onClick={() => {
+                            if (doc.url) {
+                              window.open(doc.url, "_blank");
+                            } else {
+                              alert("Document preview is not available.");
+                            }
+                          }}
+                          className="flex items-center gap-1 text-xs text-forest font-dm font-semibold hover:underline"
+                        >
                           <Eye className="w-3 h-3" /> View
                         </button>
-                        <button className="flex items-center gap-1 text-xs text-forest font-dm font-semibold hover:underline">
+                        <button
+                          onClick={() => {
+                            if (doc.url) {
+                              const a = document.createElement("a");
+                              a.href = doc.url;
+                              a.download = doc.filename || "document";
+                              a.target = "_blank";
+                              document.body.appendChild(a);
+                              a.click();
+                              document.body.removeChild(a);
+                            } else {
+                              alert("Download is not available for this document.");
+                            }
+                          }}
+                          className="flex items-center gap-1 text-xs text-forest font-dm font-semibold hover:underline"
+                        >
                           <Download className="w-3 h-3" /> Download
                         </button>
                       </div>

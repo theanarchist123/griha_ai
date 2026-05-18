@@ -61,6 +61,7 @@ async def list_properties(
     bhk: Optional[str] = None,
     min_price: Optional[int] = None,
     max_price: Optional[int] = None,
+    limit: int = 50,
 ):
     query = {}
     location_clause = _build_location_clause(location)
@@ -82,7 +83,8 @@ async def list_properties(
         conditions.append(query)
 
     final_query = {"$and": conditions} if len(conditions) > 1 else conditions[0]
-    properties = await Property.find(final_query).sort("-_id").to_list()
+    capped = max(1, min(limit, 100))
+    properties = await Property.find(final_query).sort("-_id").to_list(length=capped)
     await _enrich_missing_card_content(properties)
     return {"status": "success", "data": properties}
 
