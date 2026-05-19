@@ -536,6 +536,34 @@ function DashboardPageInner() {
               ))}
             </div>
           </section>
+
+          {/* Quick AI Tools Section */}
+          <section className="mt-8 mb-12">
+            <h2 className="font-playfair text-2xl text-charcoal mb-4">Quick AI Actions</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Link href="/contract" className="bg-surface rounded-2xl p-5 border border-border-custom hover:border-forest/40 transition-all hover:shadow-sm group">
+                <div className="w-10 h-10 rounded-xl bg-forest/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                  <Shield className="w-5 h-5 text-forest" />
+                </div>
+                <h3 className="font-dm font-semibold text-charcoal text-base">Contract Review</h3>
+                <p className="text-muted text-xs font-dm mt-1 leading-relaxed">Upload a rent agreement to scan for high-risk clauses and missing protections.</p>
+              </Link>
+              <Link href="/documents" className="bg-surface rounded-2xl p-5 border border-border-custom hover:border-warm-gold/40 transition-all hover:shadow-sm group">
+                <div className="w-10 h-10 rounded-xl bg-warm-gold/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                  <FileText className="w-5 h-5 text-warm-gold" />
+                </div>
+                <h3 className="font-dm font-semibold text-charcoal text-base">Legal Vault</h3>
+                <p className="text-muted text-xs font-dm mt-1 leading-relaxed">Ask AI questions about your uploaded receipts, NOCs, and property documents.</p>
+              </Link>
+              <Link href="/pipeline" className="bg-surface rounded-2xl p-5 border border-border-custom hover:border-blue-500/40 transition-all hover:shadow-sm group">
+                <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                  <BarChart3 className="w-5 h-5 text-blue-500" />
+                </div>
+                <h3 className="font-dm font-semibold text-charcoal text-base">Pipeline</h3>
+                <p className="text-muted text-xs font-dm mt-1 leading-relaxed">Track your shortlisted properties and active negotiations in a visual board.</p>
+              </Link>
+            </div>
+          </section>
         </div>
       </div>
 

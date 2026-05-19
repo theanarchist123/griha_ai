@@ -358,7 +358,7 @@ export function DashboardTopBar({ filters, onApplyFilters }: DashboardTopBarProp
 
   return (
     <div className="sticky top-0 z-30 bg-cream/90 backdrop-blur-md border-b border-border-custom">
-      <div className="flex items-center px-4 lg:px-6 py-3 min-h-[72px] gap-3 lg:gap-4">
+      <div className="flex items-center justify-between px-4 lg:px-6 py-3 min-h-[72px] gap-3 lg:gap-4">
         {/* Mobile hamburger */}
         <button
           onClick={() => toggleMobileSidebar()}
@@ -368,7 +368,7 @@ export function DashboardTopBar({ filters, onApplyFilters }: DashboardTopBarProp
         </button>
 
         {/* Status indicators */}
-        <div className="hidden md:flex items-center gap-4 min-w-0">
+        <div className="hidden md:flex items-center gap-4 min-w-0 flex-1">
           <div className="flex items-center gap-1.5 bg-surface/50 border border-border-custom px-3 py-1.5 rounded-full shrink-0">
             <motion.span
               className="w-2 h-2 rounded-full bg-success"
@@ -570,7 +570,7 @@ export function DashboardTopBar({ filters, onApplyFilters }: DashboardTopBarProp
         </div>
 
         {/* Right side interactions */}
-        <div className="flex items-center justify-end gap-3">
+        <div className="flex items-center justify-end gap-3 flex-1">
           <SignedIn>
             <div className="hidden md:flex items-center gap-2 rounded-xl border border-border-custom bg-surface px-2.5 py-1.5">
               <UserButton afterSignOutUrl="/sign-in" />
