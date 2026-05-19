@@ -23,6 +23,8 @@ import {
   Bell,
   CheckCircle,
   ArrowRight,
+  Shield,
+  BarChart3,
 } from "lucide-react";
 import Link from "next/link";
 
