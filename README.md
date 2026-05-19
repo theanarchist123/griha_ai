@@ -7,7 +7,7 @@
 # griha**AI** — Find Your Home. Without the Headache.
 
 **India's first AI-native property platform.**  
-Searches listings, verifies legals, negotiates with brokers, and reviews contracts — so you just make the final call.
+Searches listings, verifies legals, negotiates with brokers, reviews contracts, and now watches prices — so you just make the final call.
 
 <br/>
 
@@ -90,6 +90,25 @@ AI-powered RERA verification, encumbrance status, property tax analysis, and bui
 
 ---
 
+## 🚀 Features
+
+| Feature | Description |
+|---------|-------------|
+| 🔍 **Live Property Scraping** | Scrapes MagicBricks, 99acres, Housing.com & NoBroker on demand with real-time progress |
+| 🤖 **AI Match Scoring** | Every property scored 0–100% against your budget, BHK, location & must-haves |
+| 🛡️ **Legal Intelligence** | RERA check, encumbrance, tax status, builder track record — Clean / Caution / High Risk |
+| 📄 **Contract AI** | OCR + clause-by-clause risk analysis of rent agreements with plain-English explanations |
+| 🎙️ **Voice Negotiation** | Real-time AI voice call with "Arjun" who negotiates with brokers using market data |
+| 🗺️ **Neighbourhood Intelligence** | Interactive map, commute time, AQI, livability score, POI density |
+| 🔔 **Price Drop Alerts** | Watch any property; get notified the moment the price hits your target threshold |
+| 📊 **Property Pipeline** | Kanban-style board tracking your properties from shortlist → offer made |
+| ⚖️ **Side-by-Side Comparison** | Compare up to 4 properties across 15+ data points |
+| 📁 **Document Vault** | Upload & AI-analyze any legal document; ask natural language questions about it |
+| 🏠 **Smart Browse** | Full property catalogue with BHK, gated, pet-friendly, parking filters |
+| 🕵️ **Fake Listing Detection** | AI flags duplicate/bait-and-switch listings with a confidence score |
+
+---
+
 ## 🤖 Agent Architecture
 
 Griha AI runs a multi-agent backend where each agent owns a specialized domain:
@@ -102,6 +121,7 @@ Griha AI runs a multi-agent backend where each agent owns a specialized domain:
 | 📄 **Contract Agent** | OCR + clause-by-clause risk analysis of rental agreements |
 | 🎙️ **Negotiation Agent** | Market research → opening offer → counter-offer state machine |
 | 🗺️ **Neighbourhood Agent** | Locality reports: commute, amenities, AQI, sentiment, price trends |
+| 🔔 **Alert Agent** | Price snapshot tracking with threshold detection & trigger history |
 
 ---
 
@@ -169,7 +189,7 @@ API runs at [http://localhost:8000](http://localhost:8000) · Docs at [/docs](ht
 ```env
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_...
 CLERK_SECRET_KEY=sk_...
-NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
+NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
 
 ### Backend (`.env`)
@@ -197,20 +217,23 @@ griha_ai/
 ├── frontend/               # Next.js 14 App Router
 │   ├── src/app/
 │   │   ├── page.tsx        # Landing page
-│   │   ├── dashboard/      # Main property matches
-│   │   ├── property/[id]/  # Property detail + AI analysis
-│   │   ├── negotiate/[id]/ # Voice negotiation (Vapi)
+│   │   ├── dashboard/      # Main property matches + live scraping
+│   │   ├── browse/         # Full catalogue with filters
+│   │   ├── property/[id]/  # Property detail + full AI analysis
+│   │   ├── alerts/         # Price drop alert watchlist
+│   │   ├── pipeline/       # Property pipeline (Kanban board)
+│   │   ├── negotiate/[id]/ # Voice negotiation (Vapi AI)
 │   │   ├── neighbourhood/  # Map + locality intelligence
 │   │   ├── compare/        # Side-by-side comparison
-│   │   ├── documents/      # Upload + AI clause analysis
-│   │   ├── preferences/    # Search profile management
+│   │   ├── contract/       # Contract analysis + Q&A
+│   │   ├── documents/      # Document vault + AI ask
 │   │   └── activity/       # Live activity feed
 │   └── src/components/
 │       └── shared/Navbar   # Sidebar + topbar
 │
 └── backend/                # FastAPI
     ├── main.py
-    ├── api/routes/         # properties, negotiation, legal, documents, …
+    ├── api/routes/         # properties, negotiation, legal, documents, alerts, …
     ├── services/
     │   ├── scraper_agent.py
     │   ├── matching_agent.py
@@ -218,19 +241,26 @@ griha_ai/
     │   ├── contract_agent.py
     │   ├── negotiation_agent.py
     │   └── neighbourhood_agent.py
-    └── database/models/    # Beanie ODM documents
+    └── database/models/    # Beanie ODM documents (incl. PriceAlert)
 ```
 
 ---
 
 ## 🗺️ Roadmap
 
-- [ ] Saved / Shortlisted properties with pipeline persistence
+- [x] Live property scraping (MagicBricks, 99acres, Housing.com, NoBroker)
+- [x] AI match scoring (0–100%)
+- [x] Legal intelligence (RERA, encumbrance, tax)
+- [x] Contract AI (OCR + clause risk analysis)
+- [x] Voice negotiation with AI broker "Arjun"
+- [x] Neighbourhood intelligence map
+- [x] Property comparison (up to 4 properties)
+- [x] Property pipeline (Kanban)
+- [x] **Price drop alerts** ← newly shipped
+- [x] Document vault with AI Q&A
 - [ ] Schedule site visit from property detail
 - [ ] Map-based property browsing
-- [ ] Price drop alerts
-- [ ] AI Chat Concierge (cross-property natural language Q&A)
-- [ ] Mobile responsive layout
+- [ ] Mobile responsive layout (in progress)
 - [ ] Photo analysis agent (detect water damage, misleading photos)
 - [ ] PDF report export (legal, neighbourhood, comparison)
 

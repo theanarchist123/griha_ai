@@ -73,7 +73,7 @@ export default function ActivityPage() {
       <div className="lg:ml-[260px]">
         <DashboardTopBar />
 
-        <div className="p-6 max-w-4xl">
+        <div className="p-6">
           <div className="flex items-end justify-between mb-8">
             <div>
               <h1 className="font-playfair text-3xl text-charcoal mb-2">Activity Feed</h1>

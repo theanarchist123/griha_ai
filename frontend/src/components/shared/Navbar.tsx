@@ -41,7 +41,6 @@ const NAV_ITEMS = [
   { label: "Documents", href: "/documents", icon: FileText },
   { label: "Contract AI", href: "/contract", icon: Shield },
   { label: "Neighbourhood", href: "/neighbourhood/bandra-west", icon: MapPin },
-  { label: "Preferences", href: "/preferences", icon: Settings },
 ];
 
 
@@ -649,10 +648,6 @@ export function DashboardTopBar({ filters, onApplyFilters }: DashboardTopBarProp
               </motion.div>
             )}
           </AnimatePresence>
-
-          <Link href="/activity" className="p-2.5 bg-surface border border-border-custom hover:border-forest/50 rounded-xl transition-all hover:shadow-sm">
-            <Activity className="w-4 h-4 text-charcoal" />
-          </Link>
         </div>
       </div>
     </div>

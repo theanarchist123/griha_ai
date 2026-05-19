@@ -149,7 +149,7 @@ export default function ContractAnalysisPage() {
       <div className="lg:ml-[260px]">
         <DashboardTopBar />
 
-        <div className="p-6 max-w-5xl">
+        <div className="p-6">
           <div className="mb-6">
             <h1 className="font-playfair text-3xl text-charcoal flex items-center gap-3">
               <Shield className="w-8 h-8 text-forest" /> Contract Analysis

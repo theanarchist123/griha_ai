@@ -148,7 +148,7 @@ export default function DocumentsPage() {
       <div className="lg:ml-[260px]">
         <DashboardTopBar />
 
-        <div className="p-6 max-w-5xl">
+        <div className="p-6">
           <h1 className="font-playfair text-3xl text-charcoal mb-6">Documents</h1>
 
           {/* Smart Search */}

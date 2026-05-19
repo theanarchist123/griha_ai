@@ -357,7 +357,7 @@ function AlertsPageInner() {
       <DashboardSidebar />
       <div className="lg:ml-[260px]">
         <DashboardTopBar />
-        <div className="p-6 max-w-3xl">
+        <div className="p-6">
           {/* Header */}
           <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
             <div className="flex items-center justify-between">
