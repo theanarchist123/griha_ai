@@ -27,6 +27,7 @@ import {
   CheckCircle2,
   Zap,
   FileSearch,
+  BellRing,
 } from "lucide-react";
 
 
@@ -34,6 +35,7 @@ const NAV_ITEMS = [
   { label: "My Matches", href: "/dashboard", icon: Home, badge: 8 },
   { label: "Browse", href: "/browse", icon: Search },
   { label: "Pipeline", href: "/pipeline", icon: BarChart3 },
+  { label: "Price Alerts", href: "/alerts", icon: BellRing },
   { label: "Legal Checks", href: "/browse", icon: Scale },
   { label: "Negotiations", href: "/browse", icon: MessageSquare },
   { label: "Documents", href: "/documents", icon: FileText },
