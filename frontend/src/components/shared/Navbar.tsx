@@ -36,11 +36,9 @@ const NAV_ITEMS = [
   { label: "Browse", href: "/browse", icon: Search },
   { label: "Pipeline", href: "/pipeline", icon: BarChart3 },
   { label: "Price Alerts", href: "/alerts", icon: BellRing },
-  { label: "Legal Checks", href: "/browse", icon: Scale },
-  { label: "Negotiations", href: "/browse", icon: MessageSquare },
   { label: "Documents", href: "/documents", icon: FileText },
   { label: "Contract AI", href: "/contract", icon: Shield },
-  { label: "Neighbourhood", href: "/neighbourhood/bandra-west", icon: MapPin },
+  { label: "Neighbourhood", href: "/neighbourhood", icon: MapPin },
 ];
 
 
